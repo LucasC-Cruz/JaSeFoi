@@ -1,0 +1,11 @@
+{
+    "/": "\n[1] Login Passageiro\n[2] Login Motorista\n[3] Cadastro Passageiro\n[4] Cadastro Motorista\n[0] Sair\n",
+    "/tela/login":"\nUsuário:\nSenha:\n",
+    "/tela/cadastroPassageiro":"\nNome:\nSenha:\n",
+    "/tela/cadastroMotorista":"\nNome:\nSenha:\nCarro\n",
+    "/tela/menuPassageiro":"\n[1] Solicitar Viagem\n[2] Cancelar\n[3] Voltar\n",
+    "/tela/menuPassageiro/SolicitarViagem":"\nCidade de Origem:\nCidade de Destino\nData Desejada:\n",
+    "/tela/menuMotorista":"\nRota: (Separado por vírgula)(A ordem é relevante!!!)\nData:\nHorário de Partida:\nAssentos:\nValor por Trecho:",
+    "/tela/menuMotorista/cidades":"\nCidades disponíveis: A, B, C, D, E, F, G\n"
+
+}
