@@ -16,12 +16,15 @@ type Passageiro struct {
 	IdCaronaPassageiro string
 }
 
+
+
+
 type Motorista struct {
 	Nome     string `json:"nome"`
 	Senha    string `json:"senha"`
 	Carro    string `json:"carro"`
 	Id       string `json:"id"`
-	IdCarona string
+	Trechos []Aresta
 }
 
 // struct de corrida para o passageiro
@@ -38,25 +41,14 @@ type PairTrecho struct {
 
 //peso do grafo
 type Trecho struct {
-	IdMotorista   string
-	Data          string //vai ficar aqui por enquanto 
-	IdPassageiros []string
-	Trecho        PairTrecho 
-	Assentos      int
+	Data          string 
+	IdPassageiros []string 
+	Nassentos      int
 }
 
-// Este caba aqui será construído por nós
-// percorrendo o grafo
-type Carona struct {
-	IdMotorista string
-	IdCarona    string
-	Data        string
-	Horario     string
-	ValorTrecho float32
-	Assentos    int
-	Rota        []string // ou Trecho
-}
 
+
+//Struct para ser mandado as infos no protocolo
 type InfoCarona struct {
 	Data        string
 	Horario     string
@@ -121,4 +113,75 @@ func ProcessarLista(entrada string) ([]string, error) {
 
 	return resultado, nil
 }
+
+
+
+//grafo utilizando lista de adjacencia
+
+type Aresta struct {
+	Origem string
+	Destino string
+	Ids [] string
+}
+type Grafo struct {
+	g map[string][]Aresta
+}
+
+func NovoGrafo() *Grafo {
+	return &Grafo{g: make(map[string][]Aresta)}
+}
+
+
+//Simplesmente adiciona uma aresta na lista de adjacencia sem checar se ela já existe ou não
+//Pode causar duplicatas
+func (grafo *Grafo) AddAresta(o, d, id string) {
+	a := []string{id}
+    grafo.g[o] = append(grafo.g[d], Aresta{o, d, a})
+}
+
+//Acredito que este tipo de remoção é mais lógico do que físico devido a natureza dos slices
+//talvez seja interessante buscarmos uma outra forma de remover as coisas xd
+
+//no caso de remoção de uma aresta teríamos que avisar geral sobre suas rotas sendo canceladas
+func (grafo *Grafo) RmvAresta(o, d string) {
+	arestas := grafo.g[o] 
+	for i := range arestas {
+		if arestas[i].Destino == d {
+			arestas[i] = arestas[len(arestas)-1]
+			arestas = arestas[:len(arestas)-1] //exclusivo
+		}
+	}
+}
+
+
+func (grafo *Grafo) AddIdTrecho(o, d, id string) {
+	arestas := grafo.g[o]
+	for _, aresta := range arestas{
+		if aresta.Destino == d{
+			aresta.Ids = append(aresta.Ids, id)
+		}
+	}
+}
+
+func (grafo *Grafo) RmvIdTrecho(o, d, id string){
+	arestas := grafo.g[o]
+	for _, aresta := range arestas {
+		if aresta.Destino == d {
+			for _, idp := range aresta.Ids{
+				if id == idp{
+					idp = aresta.Ids[len(aresta.Ids)-1]
+					aresta.Ids = aresta.Ids[:len(aresta.Ids)-1]
+				}
+			}
+		}
+	}
+}
+
+
+
+
+
+
+
+
 

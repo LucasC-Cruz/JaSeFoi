@@ -25,7 +25,6 @@ var (
 	motoristas           map[string]Model.Motorista
 	motoristasOnline     map[string]string
 	passageirosOnline    map[string]string
-	caronas              map[string]Model.Carona
 	grafo                map[string]map[string][]Model.Trecho
 	caronasPassageiros   map[string]Model.CaronaPassageiro
 	caronasPassageirosMu sync.Mutex
@@ -64,11 +63,9 @@ func main() {
 	iniciarArqPassageiros()
 	iniciarArqMotoristas()
 	iniciarArqGrafo()
-	iniciarArqCaronas()
 	iniciarArqCaronasPassageiros()
 	motoristasOnline = make(map[string]string)
 	passageirosOnline = make(map[string]string)
-
 	mux := InicializaMux(&telas)
 
 	for {
@@ -78,6 +75,11 @@ func main() {
 			continue
 		}
 
+		//precisamos ter um conjunto de n threads por exemplo que vão tratar um outro conjunto
+		//v de mensagens que chegam
+
+		//a gente pode ter 1 thread para leitura e n-1 threads que vão tratar as requisições da
+		//minha fila de requisições
 		go handleConnection(conn, &mux)
 	}
 }
@@ -151,28 +153,7 @@ func iniciarArqGrafo() {
 	})
 }
 
-func iniciarArqCaronas() {
-	once6.Do(func() {
-		if caronas == nil {
-			caronas = make(map[string]Model.Carona)
-		}
-		dados, err := os.ReadFile("../data/carona.json")
-		if err != nil {
-			if os.IsNotExist(err) {
-				os.WriteFile("../data/carona.json", []byte("{}"), 0644)
-				return
-			}
-			os.Exit(1)
-		}
-		if len(dados) == 0 {
-			return
-		}
-		json.Unmarshal(dados, &caronas)
-		if caronas == nil {
-			caronas = make(map[string]Model.Carona)
-		}
-	})
-}
+
 
 func iniciarArqCaronasPassageiros() {	
 	once7.Do(func() {
@@ -255,7 +236,7 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 			"/tela/login": func(conn net.Conn, dados []byte, tk string) {
 				valor, existe := telas["/tela/login"]
 				if existe {
-					Lgcc.devolutivaGet(valor, "200", 200, tk, conn)
+					Lgcc.DevolutivaGet(valor, "200", 200, tk, conn)
 				} else {
 					conn.Close()
 				}
@@ -263,7 +244,7 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 			"/tela/cadastroPassageiro": func(conn net.Conn, dados []byte, tk string) {
 				valor, existe := telas["/tela/cadastroPassageiro"]
 				if existe {
-					Lgcc.devolutivaGet(valor, "200", 200, tk, conn)
+					Lgcc.DevolutivaGet(valor, "200", 200, tk, conn)
 				} else {
 					conn.Close()
 				}
@@ -271,7 +252,7 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 			"/tela/cadastroMotorista": func(conn net.Conn, dados []byte, tk string) {
 				valor, existe := telas["/tela/cadastroMotorista"]
 				if existe {
-					Lgcc.devolutivaGet(valor, "200", 200, tk, conn)
+					Lgcc.DevolutivaGet(valor, "200", 200, tk, conn)
 				} else {
 					conn.Close()
 				}
@@ -279,7 +260,7 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 			"/tela/menuMotorista": func(conn net.Conn, dados []byte, tk string) {
 				valor, existe := telas["/tela/menuMotorista"]
 				if existe {
-					Lgcc.devolutivaGet(valor, "200", 200, tk, conn)
+					Lgcc.DevolutivaGet(valor, "200", 200, tk, conn)
 				} else {
 					conn.Close()
 				}
@@ -287,7 +268,7 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 			"/tela/menuMotorista/cidades": func(conn net.Conn, dados []byte, tk string) {
 				valor, existe := telas["/tela/menuMotorista/cidades"]
 				if existe {
-					Lgcc.devolutivaGet(valor, "200", 200, tk, conn)
+					Lgcc.DevolutivaGet(valor, "200", 200, tk, conn)
 				} else {
 					conn.Close()
 				}
@@ -332,8 +313,8 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 				} else {
 					m.Id = Model.GerarID()
 					motoristas[m.Nome] = m
-					cu, _ := json.Marshal(motoristas)
-					os.WriteFile("../data/Motoristas.json", cu, 0644)
+					dados, _ := json.Marshal(motoristas)
+					os.WriteFile("../data/Motoristas.json", dados, 0644)
 					motoristaMu.Unlock()
 
 					header := Lgcc.GeraHeaderRespPost("OK", 200, "")

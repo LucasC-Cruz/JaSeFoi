@@ -24,6 +24,7 @@ func Dial(addr string) (*Client, error) {
 	}, nil
 }
 
+//isso na verdade é um método
 func (c *Client) AuthPassageiro (nome, senha string) (string, string, error) {
 	var p Model.Passageiro
 	var dadinhos *Lgcc.Token

@@ -194,7 +194,7 @@ func GeraBody(Body any) ([]byte, int, string, error) {
 	case []byte:
 		return valor, len(valor), "application/json", nil
 	default:
-		fmt.Println("Duaaaa")
+		fmt.Println("Erro na asserção de tipo")
 	}
 	return []byte("Erro"), 1, "erro", nil 
 }
@@ -241,7 +241,7 @@ func GerarToken(tamanhoBytes int) (string, error) {
 }
 
 
-func devolutivaGet(dados any, status string, statusCode int, token string, conn net.Conn) error{
+func DevolutivaGet(dados any, status string, statusCode int, token string, conn net.Conn) error{
 	body, tamanho, tipo, err := GeraBody(dados)
 	if err != nil{
 		fmt.Println("Erro na geração do body")
@@ -255,3 +255,8 @@ func devolutivaGet(dados any, status string, statusCode int, token string, conn 
 	}
 	return nil
 }
+
+
+//func DevolutivaPost() error { 
+
+//}
