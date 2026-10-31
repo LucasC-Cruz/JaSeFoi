@@ -5,7 +5,7 @@
     "/tela/cadastroMotorista":"\nNome:\nSenha:\nCarro\n",
     "/tela/menuPassageiro":"\n[1] Solicitar Viagem\n[2] Cancelar\n[3] Voltar\n",
     "/tela/menuPassageiro/SolicitarViagem":"\nCidade de Origem:\nCidade de Destino\nData Desejada:\n",
-    "/tela/menuMotorista":"\nRota: (Separado por vírgula)(A ordem é relevante!!!)\nData:\nHorário de Partida:\nAssentos:\nValor por Trecho:",
+    "/tela/menuMotorista":"\nRota: (Separado por vírgula)(A ordem é relevante!!!)\nData:\nAssentos:\nValor por Trecho:",
     "/tela/menuMotorista/cidades":"\nCidades disponíveis: A, B, C, D, E, F, G\n"
 
 }

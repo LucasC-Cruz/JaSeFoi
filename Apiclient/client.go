@@ -1,12 +1,13 @@
 package Apiclient
 
 import (
-	"encoding/json"
-	"net"
-	"time"
-	"fmt"
 	"Golang/Lgcc"
 	"Golang/Model"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net"
+	"time"
 )
 
 type Client struct {
@@ -26,7 +27,7 @@ func Dial(addr string) (*Client, error) {
 
 //isso na verdade é um método
 func (c *Client) AuthPassageiro (nome, senha string) (string, string, error) {
-	var p Model.Passageiro
+	var p Model.InfoLoginPassageiro
 	var dadinhos *Lgcc.Token
 	p.Nome = nome
 	p.Senha = senha
@@ -41,26 +42,29 @@ func (c *Client) AuthPassageiro (nome, senha string) (string, string, error) {
 	if dadinhos.Headers["Status-Code"] == "200" {
 		return "Passageiro logado com sucesso!", dadinhos.Headers["Token"], nil
 	}
-	return "Passageiro não foi logado com sucesso", "", nil
+	return "Passageiro não foi logado com sucesso", "", errors.New("erro")
 }
 
 func (c *Client) AuthMotorista (nome, senha string) (string, string, error) {
-	var m Model.Motorista
+	var m Model.InfoLoginMotorista
 	var dadinhos *Lgcc.Token
 	m.Nome = nome
 	m.Senha = senha
 	usuario, err := json.Marshal(m)
 	if err != nil {
-		fmt.Println("Cuzinho")
+		fmt.Println("Erro no authMotorista")
 	}
 	dadinhos, err = Lgcc.Post("/login/motorista", "true", usuario, c.Conn.(*net.TCPConn), "") 
 	if err != nil {
 		return "erro post APIClient", "", err
 	}
 	if dadinhos.Headers["Status-Code"] == "200" {
-		return "Motorista logado com sucesso bb", dadinhos.Headers["Token"],nil
+		return "Motorista logado com sucesso", dadinhos.Headers["Token"],nil
+	} else {
+		return "Senha ou usuário incorreto", "", errors.New("erro")
 	}
-	return "erro ou usuário motorista não existe", "", nil
+	
+	
 }
 
 func (c *Client) RegistraMotorista (nome, senha, carro string) (string, error) {
@@ -92,9 +96,9 @@ func (c *Client) RegistraPassageiro (nome, senha string) (string, error) {
 	}
 	dadinhos, err = Lgcc.Post("/cadastro/passageiro", "true", usuario, c.Conn.(*net.TCPConn), "")
 	if dadinhos.Headers["Status-Code"] == "200" {
-		return "\nPassageiro cadastrado com sucesso bb\n", nil
+		return "\nPassageiro cadastrado com sucesso\n", nil
 	}
-	return "\nerro ou usuário passageiro não existe\n", err
+	return "\nerro ou usuário passageiro não existe\n", fmt.Errorf("falha")
 }
 
 func (c *Client) ExibeCoisa(tela string) (string, error){
@@ -105,11 +109,10 @@ func (c *Client) ExibeCoisa(tela string) (string, error){
 	return string(tokas.Body), nil
 }
 
-func (c *Client) CadastrarCorrida(rota, data, horario string, assentos int, valorTrecho float32, tk string) (string, error){
+func (c *Client) CadastrarCorrida(rota, data string, assentos int, valorTrecho float32, tk string, flag bool) (string, error){
 	var ca Model.InfoCarona
 	var dadinhos *Lgcc.Token
 	ca.Data = data
-	ca.Horario = horario
 	ca.ValorTrecho = valorTrecho
 	ca.Assentos = assentos
 	ca.Rota = rota
@@ -117,12 +120,22 @@ func (c *Client) CadastrarCorrida(rota, data, horario string, assentos int, valo
 	if err != nil {
 		fmt.Println("Erro no registraMotorista ApiClient")
 	}
-	dadinhos, err = Lgcc.Post("/motorista/cadastrarCorrida", "true", carona, c.Conn.(*net.TCPConn), tk)
-	if dadinhos.Headers["Status-Code"] == "200" {
-		return "\n Grafo cadastrado com sucesso bb\n", nil
+	if !flag{
+		dadinhos, err = Lgcc.Post("/motorista/tentaCadastrarCorrida", "true", carona, c.Conn.(*net.TCPConn), tk)
+		if dadinhos.Headers["Status-Code"] == "200" {
+			return "\n[1] Confirmar cadastro\n[0] Cancelar cadastro", nil
+		}
+		return "\nNão existe a possibilidade de cadastrar esta corrida\n", fmt.Errorf("falha")
+	}else{
+		fmt.Println("Entrei na condição")
+		dadinhos, err = Lgcc.Post("/motorista/cadastrarCorrida", "true", carona, c.Conn.(*net.TCPConn), tk)
+		if dadinhos.Headers["Status-Code"] == "200" {
+			return "\n Corrida cadastrada com sucesso\n", nil
+		}
+		return "\nerro no registra motorista\n", fmt.Errorf("falha")
 	}
-	return "\nerro no registra motorista\n", err
 }
+
 
 func (c *Client) CancelarCorridaMotorista(tk string) (string, error) {
 	dadinhos, err := Lgcc.Post("/motorista/cancelarCorrida", "true", nil, c.Conn.(*net.TCPConn), tk)
@@ -136,12 +149,11 @@ func (c *Client) CancelarCorridaMotorista(tk string) (string, error) {
 }
 
 func (c *Client) ReservarPassagem(origem, destino, data string, tk string) (string, error) {
-	info := map[string]string{
-		"origem": origem,
-		"destin": destino,
-		"data":   data,
-	}
-	body, err := json.Marshal(info)
+	var pa Model.InfoPassagem
+	pa.Origem = origem
+	pa.Destino = destino
+	pa.Data = data
+	body, err := json.Marshal(pa)
 	if err != nil {
 		return "", err
 	}

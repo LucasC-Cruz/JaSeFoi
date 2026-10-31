@@ -136,7 +136,6 @@ MenuPrincipal:
 			front, tk, err = c.AuthMotorista(nome, senha)
 			if err != nil {
 				fmt.Println(front)
-				fmt.Println(err)
 				continue MenuPrincipal
 			}
 
@@ -156,9 +155,10 @@ MenuPrincipal:
 
 				switch subOpcao {
 				case "1":
-					var rota, data, horario string
+					var rota, data string
 					var assentos int
 					var valorTrecho float32
+					var confirmacao string
 
 					front, err := c.ExibeCoisa("/tela/menuMotorista")
 					if err != nil {
@@ -172,14 +172,33 @@ MenuPrincipal:
 					}
 					fmt.Print(front)
 
+					fmt.Print("\nRota: >> ")
 					fmt.Scan(&rota)
+					fmt.Print("Data: >> ")
 					fmt.Scan(&data)
-					fmt.Scan(&horario)
+					fmt.Print("Número de assentos: >> ")
 					fmt.Scan(&assentos)
+					fmt.Print("Valor do trecho: >> ")
 					fmt.Scan(&valorTrecho)
 
-					c.CadastrarCorrida(rota, data, horario, assentos, valorTrecho, tk)
-					fmt.Println("Corrida cadastrada!")
+					front , err = c.CadastrarCorrida(rota, data, assentos, valorTrecho, tk, false)
+					if err != nil {
+						fmt.Print(front)
+						continue MenuMotorista
+					}
+
+					fmt.Print(front)
+					fmt.Println("")
+					fmt.Scan(&confirmacao)
+					if confirmacao != "1"{
+						fmt.Println("Operação cancelada")
+						
+					} else{
+						fmt.Println(rota, data, assentos, valorTrecho)
+						front , err = c.CadastrarCorrida(rota, data, assentos, valorTrecho, tk, true)
+						fmt.Println(front)
+						continue MenuMotorista
+					}
 
 				case "2":
 					fmt.Println("Iniciando corrida...")

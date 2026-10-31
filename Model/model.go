@@ -24,26 +24,27 @@ type Motorista struct {
 	Senha    string `json:"senha"`
 	Carro    string `json:"carro"`
 	Id       string `json:"id"`
-	Trechos []Aresta
+	Trechos []PairTrecho
 }
 
-// struct de corrida para o passageiro
-// lista de motoristas, lista de trechos
-// isso será construído ao fazermos a bfs no grafo para montar uma rota para o passageiro
+
 type CaronaPassageiro struct {
-	Rota []Trecho
+	Rota []string
 }
 
 type PairTrecho struct {
 	Origem  string
 	Destino string
+	IDtrecho string
 }
 
 //peso do grafo
 type Trecho struct {
+	Id            string
+	Preco         float32
 	Data          string 
 	IdPassageiros []string 
-	Nassentos      int
+	Nassentos     int
 }
 
 
@@ -51,11 +52,29 @@ type Trecho struct {
 //Struct para ser mandado as infos no protocolo
 type InfoCarona struct {
 	Data        string
-	Horario     string
 	ValorTrecho float32
 	Assentos    int
 	Rota        string
 }
+
+type InfoLoginMotorista struct {
+	Nome     string `json:"nome"`
+	Senha    string `json:"senha"`
+	Id       string `json:"id"`
+}
+
+type InfoLoginPassageiro struct {
+	Nome     string `json:"nome"`
+	Senha    string `json:"senha"`
+	Id       string `json:"id"`
+}
+
+type InfoPassagem struct {
+	Origem     string `json:"origem"`
+	Destino    string `json:"destino"`
+	Data       string `json:"data"`
+}
+
 
 func GerarID() string {
 	// 1. Pega o tempo atual em milissegundos
@@ -73,10 +92,54 @@ func GerarID() string {
 	return fmt.Sprintf("%d-%s", timestamp, hex.EncodeToString(b))
 }
 
+//Casos do motorista
+//Cadastrar corrida
+  //caso 1: A, B, C, outras info
+  //criamos n-1 trechos com diferentes id e a mesma info, sendo n o número de vertices
+  //atribuimos ao map de trechos esses novos trechos 
+  //pegamos a info da origem e destino e ids dos trechos e criamos
+  // o pairTrechos e damos append no slice de PairTrechos do motorista
+  //Por último percorremos o grafo e atribuímos o id do motorista em suas respectivas arestas
+   
+//Remover corrida
+	//Acessa o 
+/*
+	A -> [{'A','B',[1, 2, 'caso1']},{'A','C',[4, 5]},{}]
+	B -> [{'B', 'C' [7, 12, 4,'caso1']},{},{}]
+	C -> [{},{},{}]
+	D -> []
+*/
 
+func ProcessarCadastroCorrida (infoCarona InfoCarona)([]Trecho, []string, error){
+	vertices, err := ProcessarLista(infoCarona.Rota)
+	if err != nil {
+		fmt.Println("Erro no processamento da lista de dados")
+		fmt.Println("Propragação de erro")
+		return nil, nil, err
+	}
+	n:= len(vertices)-1
+	arrayTrechos := make([]Trecho, n)
+	for i := range arrayTrechos{
+		id := GerarID()
+		listaDePassageiros := make([]string, infoCarona.Assentos)
+		trecho := Trecho{id, infoCarona.ValorTrecho, infoCarona.Data, listaDePassageiros, infoCarona.Assentos}
+		arrayTrechos[i] = trecho
+	}
+	return arrayTrechos, vertices, nil
+}
 
-
-// ProcessarLista recebe uma string, valida o separador, e retorna um slice em maiúsculo
+//TRATAR POSSÍVEIS ERROS :0
+func CriarPairTrechos(trechos []Trecho, vertices []string) ([]PairTrecho, error){
+	sliceIdTrechos := make([]PairTrecho, len(vertices)-1)
+	for i:=0; i<=len(vertices)-2;i++{
+		pairTrecho := PairTrecho{vertices[i], vertices[i+1], trechos[i].Id}
+		sliceIdTrechos[i] = pairTrecho
+	}
+	return sliceIdTrechos, nil
+}
+// ProcessarLista recebe uma string que é um trecho completo que tem que ser
+// quebrado em vertices. valida o separador, e retorna um slice em maiúsculo dos vértices que compõem este
+// trecho
 func ProcessarLista(entrada string) ([]string, error) {
 	// 1. Remove os espaços das pontas da string principal
 	entrada = strings.TrimSpace(entrada)
@@ -115,20 +178,53 @@ func ProcessarLista(entrada string) ([]string, error) {
 }
 
 
+//Meu grafo é um map de string slice de aresta
+//é uma lista de adjacencia implementada utilizando um map
+//Minha aresta tem origem, destino e Ids, acredito que de trechos
+//vamos ter um map de trechos
+
+
+//Gera um map de string Trecho. Serve para que possamos manipular os trechos
+//O servidor tipicamente vai atribuir valores a esta estrutura de dados a partir da
+//leitura de um arquivo json
+func novoMapTrechos() *map[string]Trecho {
+	mapTrechos:=make(map[string]Trecho)
+	return &mapTrechos
+}
+func novoMapMotoristas() *map[string]Motorista {
+	mapMotoristas:=make(map[string]Motorista)
+	return &mapMotoristas
+}
+
+func novoMapPassageiros() *map[string]Passageiro {
+	mapPassageiros:=make(map[string]Passageiro)
+	return &mapPassageiros
+}
+
+
+func PreencheTrechosGrafo(m Motorista, g *Grafo) (error) {
+	pairTrechos := m.Trechos
+	for i := range pairTrechos {
+		infos := pairTrechos[i]
+		g.AddIdTrecho(infos.Origem, infos.Destino, m.Id)
+	}
+	return nil
+}
+
 
 //grafo utilizando lista de adjacencia
 
 type Aresta struct {
-	Origem string
+	Origem  string
 	Destino string
-	Ids [] string
+	Ids []  string
 }
 type Grafo struct {
-	g map[string][]Aresta
+	G map[string][]Aresta
 }
 
 func NovoGrafo() *Grafo {
-	return &Grafo{g: make(map[string][]Aresta)}
+	return &Grafo{G: make(map[string][]Aresta)}
 }
 
 
@@ -136,7 +232,7 @@ func NovoGrafo() *Grafo {
 //Pode causar duplicatas
 func (grafo *Grafo) AddAresta(o, d, id string) {
 	a := []string{id}
-    grafo.g[o] = append(grafo.g[d], Aresta{o, d, a})
+    grafo.G[o] = append(grafo.G[d], Aresta{o, d, a})
 }
 
 //Acredito que este tipo de remoção é mais lógico do que físico devido a natureza dos slices
@@ -144,7 +240,7 @@ func (grafo *Grafo) AddAresta(o, d, id string) {
 
 //no caso de remoção de uma aresta teríamos que avisar geral sobre suas rotas sendo canceladas
 func (grafo *Grafo) RmvAresta(o, d string) {
-	arestas := grafo.g[o] 
+	arestas := grafo.G[o] 
 	for i := range arestas {
 		if arestas[i].Destino == d {
 			arestas[i] = arestas[len(arestas)-1]
@@ -155,16 +251,21 @@ func (grafo *Grafo) RmvAresta(o, d string) {
 
 
 func (grafo *Grafo) AddIdTrecho(o, d, id string) {
-	arestas := grafo.g[o]
-	for _, aresta := range arestas{
-		if aresta.Destino == d{
-			aresta.Ids = append(aresta.Ids, id)
+	arestas, existe := grafo.G[o]
+	if existe {
+		for i := range arestas{
+			if arestas[i].Destino == d{
+				arestas[i].Ids = append(arestas[i].Ids, id)
+				break
+			}
 		}
+	} else{
+		grafo.AddAresta(o, d, id)
 	}
 }
 
 func (grafo *Grafo) RmvIdTrecho(o, d, id string){
-	arestas := grafo.g[o]
+	arestas := grafo.G[o]
 	for _, aresta := range arestas {
 		if aresta.Destino == d {
 			for _, idp := range aresta.Ids{
@@ -176,6 +277,9 @@ func (grafo *Grafo) RmvIdTrecho(o, d, id string){
 		}
 	}
 }
+
+
+
 
 
 
