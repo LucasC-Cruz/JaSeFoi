@@ -1,15 +1,17 @@
-package main
+﻿package main
 
 import (
 	"Golang/Lgcc"
 	"Golang/Model"
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -28,11 +30,10 @@ var (
 	mapaTrechos          map[string]Model.Trecho
 	motoristasOnline     map[string]string
 	passageirosOnline    map[string]string
+	passageirosOnlineMu  sync.Mutex
 	grafo                *Model.Grafo
-	caronasPassageiros   map[string]Model.CaronaPassageiro
 
 
-	caronasPassageirosMu  sync.Mutex
 	motoristasOnlineMu    sync.Mutex
 	mutexCheckMotoristas  sync.Mutex
 	mutexCheckPassageiros sync.Mutex
@@ -77,7 +78,6 @@ func main() {
 	iniciarArqPassageiros()
 	iniciarArqMotoristas()
 	iniciarArqGrafo()
-	iniciarArqCaronasPassageiros()
 	iniciarArqCheckMotoristas()
 	iniciarArqCheckPassageiro()
 	iniciarArqTrechos()
@@ -123,6 +123,7 @@ func iniciarArqPassageiros() {
 			fmt.Println("Erro ao ler arquivo Passageiro.json", err)
 			os.Exit(1)
 		}
+		dados = bytes.TrimPrefix(dados, []byte("\xef\xbb\xbf"))
 		err = json.Unmarshal(dados, &passageiros)
 		if err != nil {
 			fmt.Println("Erro na conversão de json para slice de passageiros")
@@ -213,30 +214,6 @@ func iniciarArqGrafo() {
 	})
 }
 
-func iniciarArqCaronasPassageiros() {	
-	once7.Do(func() {
-		if caronasPassageiros == nil {
-			caronasPassageiros = make(map[string]Model.CaronaPassageiro)
-		}
-		dados, err := os.ReadFile("../data/caronas_passageiros.json")
-		if err != nil {
-			if os.IsNotExist(err) {
-				os.WriteFile("../data/caronas_passageiros.json", []byte("{}"), 0644)
-				return
-			}
-			return
-		}
-		if len(dados) == 0 {
-			return
-		}
-		json.Unmarshal(dados, &caronasPassageiros)
-		if caronasPassageiros == nil {
-			caronasPassageiros = make(map[string]Model.CaronaPassageiro)
-		}
-	})
-}
-
-
 func handleConnection(conn net.Conn, mux *map[string]func(net.Conn, []byte, string)) {
 	defer conn.Close()
 
@@ -265,8 +242,12 @@ func handleConnection(conn net.Conn, mux *map[string]func(net.Conn, []byte, stri
 				fmt.Println("é o default ")
 			}
 		} else {
+			motoristasOnlineMu.Lock()
 			delete(motoristasOnline, headers["Token"])
+			motoristasOnlineMu.Unlock()
+			passageirosOnlineMu.Lock()
 			delete(passageirosOnline, headers["Token"])
+			passageirosOnlineMu.Unlock()
 			fmt.Println("Encerrando conexão...")
 			break
 		}
@@ -399,11 +380,15 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 					Lgcc.GeraRespostaErro(999, conn, "")
 					return
 				}
+			
+				mutexCheckPassageiros.Lock()
 				a, existe := checkPassageiros[p.Nome]
 				if existe {
 					if a.Senha == p.Senha {
 						tk, _ := Lgcc.GerarToken(16)
+						passageirosOnlineMu.Lock()
 						passageirosOnline[tk] = a.Id
+						passageirosOnlineMu.Unlock()
 						header := Lgcc.GeraHeaderRespPost("OK", 200, tk)
 						Lgcc.EscritaResp(conn, header, nil)
 					} else {
@@ -416,6 +401,7 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 					Lgcc.GeraRespostaErro(999, conn, "")
 					return
 				}
+				mutexCheckPassageiros.Unlock()
 
 			},
 			"/login/motorista": func(conn net.Conn, dados2 []byte, tk string) {
@@ -444,12 +430,223 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 				}
 			},
 			"/passageiro/listarCorridasCadastradas": func(conn net.Conn, dados2 []byte, tk string) {
+				passageirosOnlineMu.Lock()
+				idPassageiro, existe := passageirosOnline[tk]
+				passageirosOnlineMu.Unlock()
+				if !existe || idPassageiro == "" {
+					Lgcc.GeraRespostaErro(401, conn, "")
+					return
+				}
+
+				passageiroMu.Lock()
+				p, tem := passageiros[idPassageiro]
+				passageiroMu.Unlock()
+
+				if !tem || len(p.IsTrechosPassageiros) == 0 {
+					Lgcc.DevolutivaGet("Nenhuma carona reservada no momento.\n", "OK", 200, tk, conn)
+					return
+				}
+
+				mutexMapaTrecho.Lock()
+				var sb strings.Builder
+				sb.WriteString("Seus trechos reservados:\n")
+				for _, idTrecho := range p.IsTrechosPassageiros {
+					t, ok := mapaTrechos[idTrecho]
+					if ok {
+						sb.WriteString(fmt.Sprintf("- Trecho: %s | Data: %s | Valor: R$ %.2f\n", t.Id, t.Data, t.Preco))
+					} else {
+						sb.WriteString(fmt.Sprintf("- Trecho ID: %s\n", idTrecho))
+					}
+				}
+				mutexMapaTrecho.Unlock()
+				Lgcc.DevolutivaGet(sb.String(), "OK", 200, tk, conn)
+			},
+			"/passageiro/tentaReservarPassagem": func(conn net.Conn, dados2 []byte, tk string) {
+				var pa Model.InfoPassagem
+				err := json.Unmarshal(dados2, &pa)
+				if err != nil {
+					Lgcc.GeraRespostaErro(999, conn, "")
+					return
+				}
+				
+				grafoMu.Lock()
+				motoristaMu.Lock()
+				mutexMapaTrecho.Lock()
+				rotas, err := grafo.BuscarRotas(pa.Origem, pa.Destino, pa.Data, motoristas, mapaTrechos)
+				mutexMapaTrecho.Unlock()
+				motoristaMu.Unlock()
+				grafoMu.Unlock()
+
+				if err != nil {
+					fmt.Println("Erro ao buscar rotas:", err)
+					Lgcc.GeraRespostaErro(999, conn, "")
+					return
+				}
+
+				dadosRotas, err := json.Marshal(rotas)
+				if err != nil {
+					fmt.Println("Erro ao serializar rotas:", err)
+					Lgcc.GeraRespostaErro(999, conn, "")
+					return
+				}
+
+				body, tamanho, tipo, err := Lgcc.GeraBody(dadosRotas)
+				if err != nil {
+					fmt.Println("Erro ao gerar body:", err)
+					Lgcc.GeraRespostaErro(999, conn, "")
+					return
+				}
+				header := Lgcc.GeraHeaderFull("OK", 200, tipo, tamanho, tk)
+				Lgcc.EscritaResp(conn, header, body)
+
 			},
 			"/passageiro/reservarPassagem": func(conn net.Conn, dados2 []byte, tk string) {
-				
+				var req Model.InfoConfirmarReserva
+				err := json.Unmarshal(dados2, &req)
+				if err != nil || len(req.Rota) == 0 {
+					fmt.Println("Erro no unmarshal de reservarPassagem:", err)
+					Lgcc.GeraRespostaErro(999, conn, "")
+					return
+				}
+
+				passageirosOnlineMu.Lock()
+				idPassageiro, existe := passageirosOnline[tk]
+				passageirosOnlineMu.Unlock()
+				if !existe || idPassageiro == "" {
+					fmt.Println("Passageiro não autenticado para reservar passagem")
+					Lgcc.GeraRespostaErro(401, conn, "")
+					return
+				}
+
+				motoristaMu.Lock()
+				mutexMapaTrecho.Lock()
+
+				var trechosParaReservar []string
+				rotaValida := true
+
+				for _, aresta := range req.Rota {
+					achouTrechoAresta := false
+					for _, idMotorista := range aresta.Ids {
+						m, ok := motoristas[idMotorista]
+						if !ok {
+							continue
+						}
+						for _, p := range m.Trechos {
+							if p.Origem == aresta.Origem && p.Destino == aresta.Destino {
+								t, ok := mapaTrechos[p.IDtrecho]
+								if ok && t.Data == req.Data && t.Nassentos > 0 {
+									trechosParaReservar = append(trechosParaReservar, p.IDtrecho)
+									achouTrechoAresta = true
+									break
+								}
+							}
+						}
+						if achouTrechoAresta {
+							break
+						}
+					}
+					if !achouTrechoAresta {
+						rotaValida = false
+						break
+					}
+				}
+
+				if !rotaValida || len(trechosParaReservar) != len(req.Rota) {
+					mutexMapaTrecho.Unlock()
+					motoristaMu.Unlock()
+					fmt.Println("Não há assentos disponíveis em todos os trechos da rota escolhida")
+					Lgcc.GeraRespostaErro(999, conn, "")
+					return
+				}
+
+				for _, idT := range trechosParaReservar {
+					t := mapaTrechos[idT]
+					t.Nassentos--
+
+					// Atualiza o slice de IdPassageiros preenchendo a vaga com o id do passageiro
+					inserido := false
+					for i, idp := range t.IdPassageiros {
+						if idp == "" {
+							t.IdPassageiros[i] = idPassageiro
+							inserido = true
+							break
+						}
+					}
+					// Se o slice não tinha slots pré-alocados com string vazia, adiciona no slice
+					if !inserido {
+						t.IdPassageiros = append(t.IdPassageiros, idPassageiro)
+					}
+
+					mapaTrechos[idT] = t
+				}
+
+				dadosTrechos, _ := json.Marshal(mapaTrechos)
+				os.WriteFile("../data/trechos.json", dadosTrechos, 0644)
+
+				mutexMapaTrecho.Unlock()
+				motoristaMu.Unlock()
+
+				// Atribui os ids dos trechos reservados ao passageiro
+				passageiroMu.Lock()
+				p, ok := passageiros[idPassageiro]
+				if ok {
+					p.IsTrechosPassageiros = trechosParaReservar
+					passageiros[idPassageiro] = p
+					dadosP, _ := json.Marshal(passageiros)
+					os.WriteFile("../data/Passageiro.json", dadosP, 0644)
+				}
+				passageiroMu.Unlock()
+
+				fmt.Printf("Passagem reservada com sucesso para o passageiro %s! Trechos: %v\n", idPassageiro, trechosParaReservar)
+				header := Lgcc.GeraHeaderRespPost("OK", 200, tk)
+				Lgcc.EscritaResp(conn, header, nil)
 			},
 			"/passageiro/cancelarPassagem": func(conn net.Conn, dados2 []byte, tk string) {
-				
+				passageirosOnlineMu.Lock()
+				idPassageiro, existe := passageirosOnline[tk]
+				passageirosOnlineMu.Unlock()
+				if !existe || idPassageiro == "" {
+					Lgcc.GeraRespostaErro(401, conn, "")
+					return
+				}
+
+				passageiroMu.Lock()
+				p, existePassageiro := passageiros[idPassageiro]
+				if !existePassageiro || len(p.IsTrechosPassageiros) == 0 {
+					passageiroMu.Unlock()
+					fmt.Printf("Passageiro %s não possui passagens para cancelar\n", idPassageiro)
+					Lgcc.GeraRespostaErro(404, conn, "")
+					return
+				}
+
+				trechosParaLiberar := p.IsTrechosPassageiros
+
+				mutexMapaTrecho.Lock()
+				for _, idTrecho := range trechosParaLiberar {
+					if t, ok := mapaTrechos[idTrecho]; ok {
+						t.Nassentos++
+						for i, idp := range t.IdPassageiros {
+							if idp == idPassageiro {
+								t.IdPassageiros[i] = ""
+								break
+							}
+						}
+						mapaTrechos[idTrecho] = t
+					}
+				}
+				dadosTrechos, _ := json.Marshal(mapaTrechos)
+				os.WriteFile("../data/trechos.json", dadosTrechos, 0644)
+				mutexMapaTrecho.Unlock()
+
+				p.IsTrechosPassageiros = []string{}
+				passageiros[idPassageiro] = p
+				dadosP, _ := json.Marshal(passageiros)
+				os.WriteFile("../data/Passageiro.json", dadosP, 0644)
+				passageiroMu.Unlock()
+
+				fmt.Printf("Passagem cancelada com sucesso para o passageiro %s!\n", idPassageiro)
+				header := Lgcc.GeraHeaderRespPost("OK", 200, tk)
+				Lgcc.EscritaResp(conn, header, nil)
 			},"/motorista/tentaCadastrarCorrida":func(conn net.Conn, dados2 []byte, tk string) {
 				//verificar que este puto tem um corrida já cadastrada, caso seja verdade já impede aí
 				//se não tiver corrida cadastrada tem que checar se existe uma possibilidade de criar rota para o local
@@ -548,7 +745,97 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 				Lgcc.EscritaResp(conn, header, nil)
 			},
 			"/motorista/cancelarCorrida": func(conn net.Conn, dados2 []byte, tk string) {
+				motoristasOnlineMu.Lock()
+				idMotorista, online := motoristasOnline[tk]
+				motoristasOnlineMu.Unlock()
+				if !online || idMotorista == "" {
+					Lgcc.GeraRespostaErro(401, conn, "")
+					return
+				}
+
+				motoristaMu.Lock()
+				motorista, existe := motoristas[idMotorista]
+				if !existe || len(motorista.Trechos) == 0 {
+					motoristaMu.Unlock()
+					fmt.Printf("Motorista %s não tem corrida ativa para cancelar\n", idMotorista)
+					Lgcc.GeraRespostaErro(404, conn, "")
+					return
+				}
+				pairTrechos := motorista.Trechos
+
+				// 1. Identifica os passageiros atendidos pelos trechos deste motorista
+				passageiroMu.Lock()
+				mutexMapaTrecho.Lock()
+
+				passageirosAfetados := make(map[string]bool)
+
+				for _, pair := range pairTrechos {
+					trecho, existeTrecho := mapaTrechos[pair.IDtrecho]
+					if existeTrecho {
+						for _, idPass := range trecho.IdPassageiros {
+							if idPass != "" {
+								passageirosAfetados[idPass] = true
+							}
+						}
+					}
+				}
+
+				// 2. Para cada passageiro atendido, acessa o slice de trechos dele e remove o passageiro de todos eles
+				for idPass := range passageirosAfetados {
+					if p, ok := passageiros[idPass]; ok {
+						for _, idTrechoDoPassageiro := range p.IsTrechosPassageiros {
+							if tPass, existeTPass := mapaTrechos[idTrechoDoPassageiro]; existeTPass {
+								tPass.Nassentos++
+								for i, idp := range tPass.IdPassageiros {
+									if idp == idPass {
+										tPass.IdPassageiros[i] = ""
+										break
+									}
+								}
+								mapaTrechos[idTrechoDoPassageiro] = tPass
+							}
+						}
+						// Limpa o slice de trechos do passageiro
+						p.IsTrechosPassageiros = []string{}
+						passageiros[idPass] = p
+					}
+				}
+
+				// 3. Remove do mapaTrechos os trechos do motorista que cancelou
+				for _, pair := range pairTrechos {
+					delete(mapaTrechos, pair.IDtrecho)
+				}
+
+				// Salva trechos.json e Passageiro.json
+				dadosT, _ := json.Marshal(mapaTrechos)
+				os.WriteFile("../data/trechos.json", dadosT, 0644)
+				mutexMapaTrecho.Unlock()
+
+				dadosP, _ := json.Marshal(passageiros)
+				os.WriteFile("../data/Passageiro.json", dadosP, 0644)
+				passageiroMu.Unlock()
+
+				// 2. Atualiza o grafo retirando o id motorista associado àquele trecho
+				grafoMu.Lock()
+				for _, pair := range pairTrechos {
+					grafo.RmvIdTrecho(pair.Origem, pair.Destino, idMotorista)
+				}
+				dadosGrafo, _ := json.Marshal(grafo)
+				os.WriteFile("../data/grafo.json", dadosGrafo, 0644)
+				grafoMu.Unlock()
+
+				// 3. Limpa os trechos do motorista e salva em Motoristas.json
+				motorista.Trechos = []Model.PairTrecho{}
+				motoristas[idMotorista] = motorista
+				dadosM, _ := json.Marshal(motoristas)
+				os.WriteFile("../data/Motoristas.json", dadosM, 0644)
+				motoristaMu.Unlock()
+
+				fmt.Printf("Corrida do motorista %s cancelada com sucesso! Trechos removidos: %d\n", idMotorista, len(pairTrechos))
+				header := Lgcc.GeraHeaderRespPost("OK", 200, tk)
+				Lgcc.EscritaResp(conn, header, nil)
 			},
+
 		}
 	})
 	return mux

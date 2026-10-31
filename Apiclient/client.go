@@ -1,4 +1,4 @@
-package Apiclient
+﻿package Apiclient
 
 import (
 	"Golang/Lgcc"
@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 )
 
@@ -148,12 +149,42 @@ func (c *Client) CancelarCorridaMotorista(tk string) (string, error) {
 	return "\nErro ao cancelar corrida\n", fmt.Errorf("falha")
 }
 
-func (c *Client) ReservarPassagem(origem, destino, data string, tk string) (string, error) {
+func (c *Client) BuscarRotas(origem, destino, data string, tk string) ([][]Model.Aresta, string, error) {
 	var pa Model.InfoPassagem
 	pa.Origem = origem
 	pa.Destino = destino
 	pa.Data = data
 	body, err := json.Marshal(pa)
+	if err != nil {
+		return nil, "", err
+	}
+
+	dadinhos, err := Lgcc.Post("/passageiro/tentaReservarPassagem", "true", body, c.Conn.(*net.TCPConn), tk)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if dadinhos.Headers["Status-Code"] == "200" {
+		var rotas [][]Model.Aresta
+		err := json.Unmarshal(dadinhos.Body, &rotas)
+		if err != nil {
+			return nil, "", fmt.Errorf("erro ao deserializar rotas: %w", err)
+		}
+		if len(rotas) == 0 {
+			return nil, "\nNenhuma rota disponível encontrada para essa data.\n", fmt.Errorf("nenhuma rota")
+		}
+		texto := FormatMenuRotas(rotas)
+		return rotas, texto, nil
+	}
+	return nil, "\nErro ao buscar rotas (Nenhuma rota encontrada)\n", fmt.Errorf("rota não encontrada")
+}
+
+func (c *Client) ConfirmarReserva(rota []Model.Aresta, data string, tk string) (string, error) {
+	req := Model.InfoConfirmarReserva{
+		Data: data,
+		Rota: rota,
+	}
+	body, err := json.Marshal(req)
 	if err != nil {
 		return "", err
 	}
@@ -164,9 +195,39 @@ func (c *Client) ReservarPassagem(origem, destino, data string, tk string) (stri
 	}
 
 	if dadinhos.Headers["Status-Code"] == "200" {
-		return fmt.Sprintf("\nPassagem reservada com sucesso! ID da Reserva: %s\n", dadinhos.Headers["Token"]), nil
+		return "\nPassagem reservada com sucesso!\n", nil
 	}
-	return "\nErro ao reservar passagem (Rota não encontrada ou sem assentos)\n", fmt.Errorf("falha na reserva")
+	return "\nErro ao reservar passagem no servidor.\n", fmt.Errorf("falha na reserva")
+}
+
+func (c *Client) ReservarPassagem(origem, destino, data string, tk string, flag bool) (string, error) {
+	if !flag {
+		_, texto, err := c.BuscarRotas(origem, destino, data, tk)
+		return texto, err
+	}
+	rotas, _, err := c.BuscarRotas(origem, destino, data, tk)
+	if err != nil || len(rotas) == 0 {
+		return "\nNenhuma rota disponível.\n", fmt.Errorf("falha")
+	}
+	return c.ConfirmarReserva(rotas[0], data, tk)
+}
+
+func FormatMenuRotas(rotas [][]Model.Aresta) string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("\n========== Rotas Disponíveis (%d encontrada(s)) ==========\n", len(rotas)))
+	for i, rota := range rotas {
+		sb.WriteString(fmt.Sprintf("[%d] ", i+1))
+		for j, aresta := range rota {
+			if j == 0 {
+				sb.WriteString(aresta.Origem)
+			}
+			sb.WriteString(" -> ")
+			sb.WriteString(aresta.Destino)
+		}
+		sb.WriteString("\n")
+	}
+	sb.WriteString("[0] Cancelar operação\n")
+	return sb.String()
 }
 
 func (c *Client) ListarCorridasPassageiro(tk string) (string, error) {
@@ -192,3 +253,21 @@ func (c *Client) CancelarPassagem(tk string) (string, error) {
 }
 
 func (c *Client) Close() error { return c.Conn.Close() }
+
+func formatarRotas(rotas [][]Model.Aresta) string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("\n========== Rotas Disponíveis (%d encontradas) ==========\n", len(rotas)))
+	for i, rota := range rotas {
+		sb.WriteString(fmt.Sprintf("\n--- Rota %d ---\n", i+1))
+		for j, aresta := range rota {
+			if j == 0 {
+				sb.WriteString(aresta.Origem)
+			}
+			sb.WriteString(" -> ")
+			sb.WriteString(aresta.Destino)
+		}
+		sb.WriteString("\n")
+	}
+	sb.WriteString("\n[1] Confirmar reserva    [0] Cancelar reserva\n")
+	return sb.String()
+}

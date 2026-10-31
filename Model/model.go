@@ -1,4 +1,4 @@
-package Model
+﻿package Model
 
 import (
 	"crypto/rand"
@@ -13,14 +13,14 @@ type Passageiro struct {
 	Nome               string `json:"nome"`
 	Senha              string `json:"senha"`
 	Id                 string `json:"id"`
-	IdCaronaPassageiro string
+	IsTrechosPassageiros []string `json:"isTrechosPassageiros"`
 }
 
 
 
 
 type Motorista struct {
-	Nome     string `json:"nome"`
+	Nome     string `json:"nome"` 
 	Senha    string `json:"senha"`
 	Carro    string `json:"carro"`
 	Id       string `json:"id"`
@@ -28,9 +28,6 @@ type Motorista struct {
 }
 
 
-type CaronaPassageiro struct {
-	Rota []string
-}
 
 type PairTrecho struct {
 	Origem  string
@@ -73,6 +70,11 @@ type InfoPassagem struct {
 	Origem     string `json:"origem"`
 	Destino    string `json:"destino"`
 	Data       string `json:"data"`
+}
+
+type InfoConfirmarReserva struct {
+	Data string   `json:"data"`
+	Rota []Aresta `json:"rota"`
 }
 
 
@@ -232,7 +234,7 @@ func NovoGrafo() *Grafo {
 //Pode causar duplicatas
 func (grafo *Grafo) AddAresta(o, d, id string) {
 	a := []string{id}
-    grafo.G[o] = append(grafo.G[d], Aresta{o, d, a})
+    grafo.G[o] = append(grafo.G[o], Aresta{o, d, a})
 }
 
 //Acredito que este tipo de remoção é mais lógico do que físico devido a natureza dos slices
@@ -256,7 +258,9 @@ func (grafo *Grafo) AddIdTrecho(o, d, id string) {
 		for i := range arestas{
 			if arestas[i].Destino == d{
 				arestas[i].Ids = append(arestas[i].Ids, id)
-				break
+				return
+			} else {
+				grafo.AddAresta(o, d, id)
 			}
 		}
 	} else{
@@ -264,26 +268,106 @@ func (grafo *Grafo) AddIdTrecho(o, d, id string) {
 	}
 }
 
-func (grafo *Grafo) RmvIdTrecho(o, d, id string){
-	arestas := grafo.G[o]
-	for _, aresta := range arestas {
-		if aresta.Destino == d {
-			for _, idp := range aresta.Ids{
-				if id == idp{
-					idp = aresta.Ids[len(aresta.Ids)-1]
-					aresta.Ids = aresta.Ids[:len(aresta.Ids)-1]
+func (grafo *Grafo) RmvIdTrecho(o, d, id string) {
+	arestas, ok := grafo.G[o]
+	if !ok {
+		return
+	}
+	for i := range arestas {
+		if arestas[i].Destino == d {
+			novosIds := make([]string, 0, len(arestas[i].Ids))
+			for _, idp := range arestas[i].Ids {
+				if idp != id {
+					novosIds = append(novosIds, idp)
 				}
 			}
+			arestas[i].Ids = novosIds
+			break
 		}
 	}
+	grafo.G[o] = arestas
+}
+func (g *Grafo) BuscarRotas(
+    origem, destino, data string,
+    motoristas map[string]Motorista,
+    trechos map[string]Trecho,
+) ([][]Aresta, error) {
+    if origem == destino {
+        return nil, fmt.Errorf("origem e destino são iguais")
+    }
+    if _, ok := g.G[origem]; !ok {
+        return nil, fmt.Errorf("origem %q não existe no grafo", origem)
+    }
+
+    var rotas [][]Aresta
+    caminho := []Aresta{}
+    visitados := map[string]bool{origem: true}
+
+    var dfs func(atual string)
+    dfs = func(atual string) {
+        if atual == destino {
+            rota := make([]Aresta, len(caminho))
+            copy(rota, caminho)
+            rotas = append(rotas, rota)
+            return
+        }
+
+        for _, a := range g.G[atual] {
+            if visitados[a.Destino] {
+                continue
+            }
+            // critério novo: só segue se houver trecho válido nesta aresta
+            if !arestaDisponivel(a, data, motoristas, trechos) {
+                continue
+            }
+
+            visitados[a.Destino] = true
+            caminho = append(caminho, a)
+
+            dfs(a.Destino)
+
+            caminho = caminho[:len(caminho)-1]
+            visitados[a.Destino] = false
+        }
+    }
+
+    dfs(origem)
+
+    if len(rotas) == 0 {
+        return nil, fmt.Errorf("não existe rota disponível de %q para %q em %s", origem, destino, data)
+    }
+    return rotas, nil
 }
 
-
-
-
-
-
-
+// arestaDisponivel devolve true se algum motorista da aresta tem um trecho
+// naquela origem->destino, na data pedida, e com assentos livres.
+func arestaDisponivel(
+    a Aresta,
+    data string,
+    motoristas map[string]Motorista,
+    trechos map[string]Trecho,
+) bool {
+    for _, idMotorista := range a.Ids {
+        m, ok := motoristas[idMotorista]
+        if !ok {
+            continue
+        }
+        for _, p := range m.Trechos {
+            // o motorista tem PairTrechos de várias arestas: filtra só os desta
+            if p.Origem != a.Origem || p.Destino != a.Destino {
+                continue
+            }
+            t, ok := trechos[p.IDtrecho]
+            if !ok {
+                continue
+            }
+            if t.Data == data && t.Nassentos > 0 {
+                return true
+            }
+        }
+    }
+    return false
+}
 
 
 

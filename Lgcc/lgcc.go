@@ -1,4 +1,4 @@
-package Lgcc
+﻿package Lgcc
 
 import (
 	"bufio"
@@ -61,17 +61,28 @@ func Post(caminho string, keep string, corpo []byte, conn *net.TCPConn, token st
 		return nil, err
 	}
 
-	//vamos simplesmente mandar uma string que vai conter o caminho do dado
 	reader := bufio.NewReader(conn)
 	headers := make(map[string]string)
 
 	headers, err = OneForAllParser(reader, headers)
 	if err != nil {
 		fmt.Println("Deu ruim o parser")
+		return nil, err
 	}
-	return &Token{Headers: headers, Body: nil}, nil
-}
 
+	var respBody []byte
+	if tamStr, ok := headers["Tamanho-Conteudo"]; ok && tamStr != "" {
+		n, _ := strconv.Atoi(tamStr)
+		if n > 0 {
+			respBody = make([]byte, n)
+			if _, err := io.ReadFull(reader, respBody); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return &Token{Headers: headers, Body: respBody}, nil
+}
 func OneForAllParser(reader *bufio.Reader, headers map[string]string) (map[string]string, error) {
 	//jeito IAônico faraônico, possivelmente há um jeito melhor de fazer isso daqui
 	for {

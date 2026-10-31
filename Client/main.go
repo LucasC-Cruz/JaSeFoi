@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"Golang/Apiclient"
@@ -85,8 +85,10 @@ MenuPrincipal:
 						fmt.Println("Seus trechos reservados:")
 						fmt.Println(res)
 					}
+					
 				case "2":
 					var origem, destino, data string
+					var escolha int
 
 					fmt.Println("Digite a Origem:")
 					fmt.Scan(&origem)
@@ -97,13 +99,32 @@ MenuPrincipal:
 					fmt.Println("Digite a Data (ex: 20/10):")
 					fmt.Scan(&data)
 
-					msg, err := c.ReservarPassagem(origem, destino, data, tk)
+					rotas, menu, err := c.BuscarRotas(origem, destino, data, tk)
+					if err != nil {
+						fmt.Println(menu)
+						fmt.Println("Erro:", err)
+						continue MenuPassageiro
+					}
+					fmt.Println(rotas)
+
+					fmt.Print(menu)
+					fmt.Print("\nDigite o número da rota desejada: >> ")
+					fmt.Scan(&escolha)
+
+					if escolha <= 0 || escolha > len(rotas) {
+						fmt.Println("Operação cancelada ou opção inválida.")
+						continue MenuPassageiro
+					}
+
+					rotaEscolhida := rotas[escolha-1]
+					msg, err := c.ConfirmarReserva(rotaEscolhida, data, tk)
 					if err != nil {
 						fmt.Println("Erro:", err)
 					} else {
 						fmt.Println(msg)
 					}
-					
+					continue MenuPassageiro
+
 				case "3":
 					fmt.Println("Cancelando passagem...")
 					msg, err := c.CancelarPassagem(tk)
@@ -204,7 +225,12 @@ MenuPrincipal:
 					fmt.Println("Iniciando corrida...")
 				case "3":
 					fmt.Println("Cancelando corrida...")
-					c.CancelarCorridaMotorista(tk)
+					msg, err := c.CancelarCorridaMotorista(tk)
+					if err != nil {
+						fmt.Println("Erro:", err)
+					} else {
+						fmt.Println(msg)
+					}
 				case "4":
 					fmt.Println("Finalizando corrida...")
 				case "0":

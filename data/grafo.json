@@ -1,1 +1,1 @@
-{"G":{"A":[{"Origem":"A","Destino":"B","Ids":["1793240019407-7d122dbff06d"]}],"B":[{"Origem":"B","Destino":"C","Ids":["1793240019407-7d122dbff06d"]}]}}
+{"G":{"A":[{"Origem":"A","Destino":"B","Ids":["1793481902240-7f448d8d8278"]}],"B":[{"Origem":"B","Destino":"C","Ids":[]}],"CONCORRENCIA_A":[{"Origem":"CONCORRENCIA_A","Destino":"CONCORRENCIA_B","Ids":["1793484093180-f12d0348e1d6","1793484325643-4ee872b534c2","1793484445085-9ac4e9ad62ce","1793484566107-ccadc93510e8","1793484611522-fb045d262cd7"]}]}}
