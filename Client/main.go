@@ -9,12 +9,12 @@ import (
 
 const (
 	HOST = "localhost"
-	PORT = "6742"
+	PORT = "6741"
 	TYPE = "tcp"
 )
 
 func main() {
-	addr := flag.String("addr", "localhost:6742", "endereço do servidor (host:porta)")
+	addr := flag.String("addr", "localhost:6741", "endereço do servidor (host:porta)")
 	flag.Parse()
 
 	c, err := Apiclient.Dial(*addr)
@@ -135,6 +135,7 @@ MenuPrincipal:
 					}
 				case "0":
 					fmt.Println("Deslogando...")
+					c.LogoutPassageiro(tk)
 					break MenuPassageiro
 				default:
 					fmt.Println("Opção inválida.")
@@ -235,6 +236,7 @@ MenuPrincipal:
 					fmt.Println("Finalizando corrida...")
 				case "0":
 					fmt.Println("Deslogando...")
+					c.LogoutMotorista(tk)
 					break MenuMotorista
 				default:
 					fmt.Println("Opção inválida.")

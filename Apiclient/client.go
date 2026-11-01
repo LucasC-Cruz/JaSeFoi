@@ -46,6 +46,17 @@ func (c *Client) AuthPassageiro (nome, senha string) (string, string, error) {
 	return "Passageiro não foi logado com sucesso", "", errors.New("erro")
 }
 
+func (c *Client) LogoutPassageiro(tk string) (string, error) {
+	dadinhos, err := Lgcc.Post("/logout/passageiro", "true", nil, c.Conn.(*net.TCPConn), tk)
+	if err != nil {
+		return "", err
+	}
+	if dadinhos.Headers["Status-Code"] == "200" {
+		return "Passageiro deslogado com sucesso!", nil
+	}
+	return "Erro ao deslogar", fmt.Errorf("falha ao deslogar")
+}
+
 func (c *Client) AuthMotorista (nome, senha string) (string, string, error) {
 	var m Model.InfoLoginMotorista
 	var dadinhos *Lgcc.Token
@@ -68,6 +79,16 @@ func (c *Client) AuthMotorista (nome, senha string) (string, string, error) {
 	
 }
 
+func (c *Client) LogoutMotorista(tk string) (string, error) {
+	dadinhos, err := Lgcc.Post("/logout/motorista", "true", nil, c.Conn.(*net.TCPConn), tk)
+	if err != nil {
+		return "", err
+	}
+	if dadinhos.Headers["Status-Code"] == "200" {
+		return "Motorista deslogado com sucesso!", nil
+	}
+	return "Erro ao deslogar", fmt.Errorf("falha ao deslogar")
+}
 func (c *Client) RegistraMotorista (nome, senha, carro string) (string, error) {
 	var m Model.Motorista
 	var dadinhos *Lgcc.Token
@@ -95,7 +116,11 @@ func (c *Client) RegistraPassageiro (nome, senha string) (string, error) {
 	if err != nil {
 		fmt.Println("Erro no registra Passageiro APIClient")
 	}
+	fmt.Println("Errrrr")
 	dadinhos, err = Lgcc.Post("/cadastro/passageiro", "true", usuario, c.Conn.(*net.TCPConn), "")
+	fmt.Println("Errrrr1")
+	fmt.Println(dadinhos.Headers)
+	fmt.Println("Erro aqui")
 	if dadinhos.Headers["Status-Code"] == "200" {
 		return "\nPassageiro cadastrado com sucesso\n", nil
 	}

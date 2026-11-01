@@ -1,0 +1,9 @@
+{
+  "id": "server-2",
+  "porta": "6742",
+  "dataDir": "../data/server2",
+  "vizinhos": ["127.0.0.1:6741", "127.0.0.1:6743"],
+  "cidades": ["FEIRA DE SANTANA", "SERRINHA"],
+  "cidadesInter": ["SERRINHA"]
+}
+

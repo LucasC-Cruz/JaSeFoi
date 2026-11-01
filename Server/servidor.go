@@ -10,61 +10,104 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 )
 
-type InfoReserva struct {
-	Origem  string `json:"origem"`
-	Destino string `json:"destin"`
-	Data    string `json:"data"`
+type ServerConfig struct {
+	ID            string   `json:"id"`
+	Porta         string   `json:"porta"`
+	DataDir       string   `json:"dataDir"`
+	Vizinhos      []string `json:"vizinhos"`
+	Cidades       []string `json:"cidades"`
+	CidadesInter  []string `json:"cidadesInter"`
 }
 
-var (
-	telas                map[string]string
-	passageiros          map[string]Model.Passageiro
-	checkMotoristas      map[string]Model.InfoLoginMotorista
-	checkPassageiros     map[string]Model.InfoLoginPassageiro
-	motoristas           map[string]Model.Motorista
-	mapaTrechos          map[string]Model.Trecho
-	motoristasOnline     map[string]string
-	passageirosOnline    map[string]string
-	passageirosOnlineMu  sync.Mutex
-	grafo                *Model.Grafo
+var serverConfig ServerConfig
 
+func getDataPath(arquivo string) string {
+	return filepath.Join(serverConfig.DataDir, arquivo)
+}
+
+func carregarConfig() {
+	if len(os.Args) < 2 {
+		fmt.Println("Uso: go run servidor.go <config.json> ou go run servidor.go <porta>")
+		os.Exit(1)
+	}
+
+	arg := os.Args[1]
+	if strings.HasSuffix(arg, ".json") {
+		dados, err := os.ReadFile(arg)
+		if err != nil {
+			// Fallback caso seja executado de dentro da pasta Server/
+			dados, err = os.ReadFile(filepath.Join("..", arg))
+		}
+		if err != nil {
+			fmt.Printf("Erro ao ler arquivo de config %s: %v\n", arg, err)
+			os.Exit(1)
+		}
+		dados = bytes.TrimPrefix(dados, []byte("\xef\xbb\xbf")) //isso é pra possíveis erros do windows
+		err = json.Unmarshal(dados, &serverConfig)
+		if err != nil {
+			fmt.Printf("Erro ao converter json de config: %v\n", err)
+			os.Exit(1)
+		}
+	} else {
+		// Fallback compatível com porta simples (ex: go run servidor.go 6742)
+		//fallback para caso não seja um arquivo compatível
+		serverConfig = ServerConfig{
+			ID:       "default",
+			Porta:    arg,
+			DataDir:  "../data",
+			Vizinhos: []string{},
+			Cidades:  []string{},
+		}
+	}
+
+	// Garante que o diretório de dados existe
+	os.MkdirAll(serverConfig.DataDir, 0755)
+}
+
+
+var (
+	telas               map[string]string
+	passageiros         map[string]Model.Passageiro
+	checkMotoristas     map[string]Model.InfoLoginMotorista
+	checkPassageiros    map[string]Model.InfoLoginPassageiro
+	motoristas          map[string]Model.Motorista
+	mapaTrechos         map[string]Model.Trecho
+	motoristasOnline    map[string]string
+	passageirosOnline   map[string]string
+	passageirosOnlineMu sync.Mutex
+	grafo               *Model.Grafo
 
 	motoristasOnlineMu    sync.Mutex
 	mutexCheckMotoristas  sync.Mutex
 	mutexCheckPassageiros sync.Mutex
 	mutexMapaTrecho       sync.Mutex
-	caronasMu    		  sync.Mutex
-	passageiroMu 		  sync.Mutex
-	motoristaMu  		  sync.Mutex
-	grafoMu      		  sync.Mutex
+	caronasMu             sync.Mutex
+	passageiroMu          sync.Mutex
+	motoristaMu           sync.Mutex
+	grafoMu               sync.Mutex
 
-
-	once         		 sync.Once
-	once2        		 sync.Once
-	once3        		 sync.Once
-	once4        		 sync.Once
-	once5        		 sync.Once
-	once6        		 sync.Once
-	once7        		 sync.Once
-	once8        		 sync.Once
-	once9        		 sync.Once
-	once10        		 sync.Once
-	
+	once   sync.Once
+	once2  sync.Once
+	once3  sync.Once
+	once4  sync.Once
+	once5  sync.Once
+	once6  sync.Once
+	once7  sync.Once
+	once8  sync.Once
+	once9  sync.Once
+	once10 sync.Once
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("Comando incorreto!")
-		fmt.Println("Talvez queira dizer: go run <arquivo> <porta>?")
-		os.Exit(1)
-	}
+	carregarConfig()
 
-	porta := fmt.Sprintf(":%s", os.Args[1])
+	porta := fmt.Sprintf(":%s", serverConfig.Porta)
 
 	listener, err := net.Listen("tcp", porta)
 	if err != nil {
@@ -72,7 +115,13 @@ func main() {
 		os.Exit(1)
 	}
 	defer listener.Close()
-	fmt.Printf("Estou escutando no endereço %s\n", listener.Addr())
+	fmt.Printf("[%s] Escutando no endereço %s | DataDir: %s\n", serverConfig.ID, listener.Addr(), serverConfig.DataDir)
+	if len(serverConfig.Vizinhos) > 0 {
+		fmt.Printf("[%s] Servidores vizinhos: %v\n", serverConfig.ID, serverConfig.Vizinhos)
+	}
+	if len(serverConfig.Cidades) > 0 {
+		fmt.Printf("[%s] Cidades sob jurisdição: %v\n", serverConfig.ID, serverConfig.Cidades)
+	}
 
 	iniciarArqTela()
 	iniciarArqPassageiros()
@@ -100,17 +149,21 @@ func main() {
 	}
 }
 
-
 func iniciarArqTela() {
 	once.Do(func() {
-		dados, err := os.ReadFile("../data/telas.json")
+		caminho := getDataPath("telas.json")
+		dados, err := os.ReadFile(caminho)
 		if err != nil {
-			fmt.Println("Erro ao ler arquivo", err)
-			os.Exit(1)
+			dados, err = os.ReadFile("../data/telas.json")
+			if err != nil {
+				fmt.Println("Erro ao ler arquivo telas.json:", err)
+				os.Exit(1)
+			}
 		}
+		dados = bytes.TrimPrefix(dados, []byte("\xef\xbb\xbf"))
 		err = json.Unmarshal(dados, &telas)
 		if err != nil {
-			fmt.Println("Erro na conversão de json para map")
+			fmt.Println("Erro na conversão de json para map telas:", err)
 			os.Exit(1)
 		}
 	})
@@ -118,95 +171,144 @@ func iniciarArqTela() {
 
 func iniciarArqPassageiros() {
 	once3.Do(func() {
-		dados, err := os.ReadFile("../data/Passageiro.json")
+		caminho := getDataPath("Passageiro.json")
+		dados, err := os.ReadFile(caminho)
 		if err != nil {
-			fmt.Println("Erro ao ler arquivo Passageiro.json", err)
+			if os.IsNotExist(err) {
+				passageiros = make(map[string]Model.Passageiro)
+				os.WriteFile(caminho, []byte("{}"), 0644)
+				return
+			}
+			fmt.Println("Erro ao ler arquivo Passageiro.json:", err)
 			os.Exit(1)
 		}
 		dados = bytes.TrimPrefix(dados, []byte("\xef\xbb\xbf"))
 		err = json.Unmarshal(dados, &passageiros)
 		if err != nil {
-			fmt.Println("Erro na conversão de json para slice de passageiros")
+			fmt.Println("Erro na conversão de json para passageiros:", err)
 			os.Exit(1)
+		}
+		if passageiros == nil {
+			passageiros = make(map[string]Model.Passageiro)
 		}
 	})
 }
 
 func iniciarArqMotoristas() {
 	once4.Do(func() {
-		dados, err := os.ReadFile("../data/Motoristas.json")
+		caminho := getDataPath("Motoristas.json")
+		dados, err := os.ReadFile(caminho)
 		if err != nil {
-			fmt.Println("Erro ao ler arquivo Motoristas.json", err)
+			if os.IsNotExist(err) {
+				motoristas = make(map[string]Model.Motorista)
+				os.WriteFile(caminho, []byte("{}"), 0644)
+				return
+			}
+			fmt.Println("Erro ao ler arquivo Motoristas.json:", err)
 			os.Exit(1)
 		}
+		dados = bytes.TrimPrefix(dados, []byte("\xef\xbb\xbf"))
 		err = json.Unmarshal(dados, &motoristas)
 		if err != nil {
-			fmt.Println("Erro na conversão de json para slice de usuarios")
+			fmt.Println("Erro na conversão de json para motoristas:", err)
 			os.Exit(1)
+		}
+		if motoristas == nil {
+			motoristas = make(map[string]Model.Motorista)
 		}
 	})
 }
 
 func iniciarArqTrechos() {
 	once9.Do(func() {
-		dados, err := os.ReadFile("../data/trechos.json")
+		caminho := getDataPath("trechos.json")
+		dados, err := os.ReadFile(caminho)
 		if err != nil {
-			fmt.Println("Erro ao ler arquivo trechos.json", err)
+			if os.IsNotExist(err) {
+				mapaTrechos = make(map[string]Model.Trecho)
+				os.WriteFile(caminho, []byte("{}"), 0644)
+				return
+			}
+			fmt.Println("Erro ao ler arquivo trechos.json:", err)
 			os.Exit(1)
 		}
+		dados = bytes.TrimPrefix(dados, []byte("\xef\xbb\xbf"))
 		err = json.Unmarshal(dados, &mapaTrechos)
 		if err != nil {
-			fmt.Println("Erro na conversão de json para trechos")
+			fmt.Println("Erro na conversão de json para trechos:", err)
 			os.Exit(1)
+		}
+		if mapaTrechos == nil {
+			mapaTrechos = make(map[string]Model.Trecho)
 		}
 	})
 }
 
 func iniciarArqCheckMotoristas() {
 	once8.Do(func() {
-		dados, err := os.ReadFile("../data/checkMotoristas.json")
+		caminho := getDataPath("checkMotoristas.json")
+		dados, err := os.ReadFile(caminho)
 		if err != nil {
-			fmt.Println("Erro ao ler arquivo checkMotoristas.json", err)
+			if os.IsNotExist(err) {
+				checkMotoristas = make(map[string]Model.InfoLoginMotorista)
+				os.WriteFile(caminho, []byte("{}"), 0644)
+				return
+			}
+			fmt.Println("Erro ao ler arquivo checkMotoristas.json:", err)
 			os.Exit(1)
 		}
+		dados = bytes.TrimPrefix(dados, []byte("\xef\xbb\xbf"))
 		err = json.Unmarshal(dados, &checkMotoristas)
 		if err != nil {
-			fmt.Println("Erro na conversão de json para map check motoristas")
+			fmt.Println("Erro na conversão de json para check motoristas:", err)
 			os.Exit(1)
+		}
+		if checkMotoristas == nil {
+			checkMotoristas = make(map[string]Model.InfoLoginMotorista)
 		}
 	})
 }
-
 
 func iniciarArqCheckPassageiro() {
 	once10.Do(func() {
-		dados, err := os.ReadFile("../data/checkPassageiros.json")
+		caminho := getDataPath("checkPassageiros.json")
+		dados, err := os.ReadFile(caminho)
 		if err != nil {
-			fmt.Println("Erro ao ler arquivo checkPassageiros.json", err)
+			if os.IsNotExist(err) {
+				checkPassageiros = make(map[string]Model.InfoLoginPassageiro)
+				os.WriteFile(caminho, []byte("{}"), 0644)
+				return
+			}
+			fmt.Println("Erro ao ler arquivo checkPassageiros.json:", err)
 			os.Exit(1)
 		}
+		dados = bytes.TrimPrefix(dados, []byte("\xef\xbb\xbf"))
 		err = json.Unmarshal(dados, &checkPassageiros)
 		if err != nil {
-			fmt.Println("Erro na conversão de json para map check passageiros")
+			fmt.Println("Erro na conversão de json para check passageiros:", err)
 			os.Exit(1)
+		}
+		if checkPassageiros == nil {
+			checkPassageiros = make(map[string]Model.InfoLoginPassageiro)
 		}
 	})
 }
-
 
 func iniciarArqGrafo() {
 	once5.Do(func() {
 		if grafo == nil {
 			grafo = Model.NovoGrafo()
 		}
-		dados, err := os.ReadFile("../data/grafo.json")
+		caminho := getDataPath("grafo.json")
+		dados, err := os.ReadFile(caminho)
 		if err != nil {
 			if os.IsNotExist(err) {
-				os.WriteFile("../data/grafo.json", []byte("{}"), 0644)
+				os.WriteFile(caminho, []byte("{}"), 0644)
 				return
 			}
 			os.Exit(1)
 		}
+		dados = bytes.TrimPrefix(dados, []byte("\xef\xbb\xbf"))
 		if len(dados) == 0 {
 			return
 		}
@@ -255,7 +357,7 @@ func handleConnection(conn net.Conn, mux *map[string]func(net.Conn, []byte, stri
 }
 
 func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, string) {
-	var mux map[string]func(net.Conn, []byte, string)// isso daqui não seria alocado em memória?
+	var mux map[string]func(net.Conn, []byte, string) // isso daqui não seria alocado em memória?
 
 	//apesar de ser inicializado somente uma vez
 	once2.Do(func() {
@@ -330,13 +432,11 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 					p.Id = Model.GerarID()
 					passageiroMu.Lock()
 					passageiros[p.Id] = p
-					fmt.Println("Deu erro aqui")
 					checkPassageiros[p.Nome] = Model.InfoLoginPassageiro{Nome: p.Nome, Senha: p.Senha, Id: p.Id}
-					fmt.Println("Deu erro aqui 12")
 					dados, _ := json.Marshal(passageiros)
 					dados2, _ := json.Marshal(checkPassageiros)
-					os.WriteFile("../data/Passageiro.json", dados, 0644)
-					os.WriteFile("../data/checkPassageiros.json", dados2, 0644)
+					os.WriteFile(getDataPath("Passageiro.json"), dados, 0644)
+					os.WriteFile(getDataPath("checkPassageiros.json"), dados2, 0644)
 					passageiroMu.Unlock()
 					mutexCheckPassageiros.Unlock()
 
@@ -364,8 +464,8 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 					checkMotoristas[m.Nome] = Model.InfoLoginMotorista{Nome: m.Nome, Senha: m.Senha, Id: m.Id}
 					dados, _ := json.Marshal(motoristas)
 					dados2, _ := json.Marshal(checkMotoristas)
-					os.WriteFile("../data/Motoristas.json", dados, 0644)
-					os.WriteFile("../data/checkMotoristas.json", dados2, 0644)
+					os.WriteFile(getDataPath("Motoristas.json"), dados, 0644)
+					os.WriteFile(getDataPath("checkMotoristas.json"), dados2, 0644)
 					motoristaMu.Unlock()
 					mutexCheckMotoristas.Unlock()
 
@@ -380,7 +480,7 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 					Lgcc.GeraRespostaErro(999, conn, "")
 					return
 				}
-			
+
 				mutexCheckPassageiros.Lock()
 				a, existe := checkPassageiros[p.Nome]
 				if existe {
@@ -404,6 +504,18 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 				mutexCheckPassageiros.Unlock()
 
 			},
+			"/logout/passageiro": func(conn net.Conn, dados2 []byte, tk string) {
+				passageirosOnlineMu.Lock()
+				idPassageiro, existe := passageirosOnline[tk]
+				delete(passageirosOnline, tk)
+				passageirosOnlineMu.Unlock()
+
+				if existe {
+					fmt.Printf("Passageiro %s deslogado com sucesso (token %s)!\n", idPassageiro, tk)
+				}
+				header := Lgcc.GeraHeaderRespPost("OK", 200, "")
+				Lgcc.EscritaResp(conn, header, nil)
+			},
 			"/login/motorista": func(conn net.Conn, dados2 []byte, tk string) {
 				var m Model.InfoLoginMotorista
 				err := json.Unmarshal(dados2, &m)
@@ -413,7 +525,7 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 				}
 				a, existe := checkMotoristas[m.Nome]
 				if existe {
-					if a.Senha == m.Senha{
+					if a.Senha == m.Senha {
 						tk, _ := Lgcc.GerarToken(16)
 						motoristasOnline[tk] = a.Id
 						header := Lgcc.GeraHeaderRespPost("OK", 200, tk)
@@ -422,12 +534,24 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 
 						fmt.Println("Senha Incorreta")
 						Lgcc.GeraRespostaErro(999, conn, "")
-						return	
+						return
 					}
 				} else {
 					Lgcc.GeraRespostaErro(999, conn, "")
 					return
 				}
+			},
+			"/logout/motorista": func(conn net.Conn, dados2 []byte, tk string) {
+				motoristasOnlineMu.Lock()
+				idMotorista, existe := motoristasOnline[tk]
+				delete(motoristasOnline, tk)
+				motoristasOnlineMu.Unlock()
+
+				if existe {
+					fmt.Printf("Motorista %s deslogado com sucesso (token %s)!\n", idMotorista, tk)
+				}
+				header := Lgcc.GeraHeaderRespPost("OK", 200, "")
+				Lgcc.EscritaResp(conn, header, nil)
 			},
 			"/passageiro/listarCorridasCadastradas": func(conn net.Conn, dados2 []byte, tk string) {
 				passageirosOnlineMu.Lock()
@@ -468,7 +592,7 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 					Lgcc.GeraRespostaErro(999, conn, "")
 					return
 				}
-				
+
 				grafoMu.Lock()
 				motoristaMu.Lock()
 				mutexMapaTrecho.Lock()
@@ -581,7 +705,7 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 				}
 
 				dadosTrechos, _ := json.Marshal(mapaTrechos)
-				os.WriteFile("../data/trechos.json", dadosTrechos, 0644)
+				os.WriteFile(getDataPath("trechos.json"), dadosTrechos, 0644)
 
 				mutexMapaTrecho.Unlock()
 				motoristaMu.Unlock()
@@ -593,7 +717,7 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 					p.IsTrechosPassageiros = trechosParaReservar
 					passageiros[idPassageiro] = p
 					dadosP, _ := json.Marshal(passageiros)
-					os.WriteFile("../data/Passageiro.json", dadosP, 0644)
+					os.WriteFile(getDataPath("Passageiro.json"), dadosP, 0644)
 				}
 				passageiroMu.Unlock()
 
@@ -635,19 +759,19 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 					}
 				}
 				dadosTrechos, _ := json.Marshal(mapaTrechos)
-				os.WriteFile("../data/trechos.json", dadosTrechos, 0644)
+				os.WriteFile(getDataPath("trechos.json"), dadosTrechos, 0644)
 				mutexMapaTrecho.Unlock()
 
 				p.IsTrechosPassageiros = []string{}
 				passageiros[idPassageiro] = p
 				dadosP, _ := json.Marshal(passageiros)
-				os.WriteFile("../data/Passageiro.json", dadosP, 0644)
+				os.WriteFile(getDataPath("Passageiro.json"), dadosP, 0644)
 				passageiroMu.Unlock()
 
 				fmt.Printf("Passagem cancelada com sucesso para o passageiro %s!\n", idPassageiro)
 				header := Lgcc.GeraHeaderRespPost("OK", 200, tk)
 				Lgcc.EscritaResp(conn, header, nil)
-			},"/motorista/tentaCadastrarCorrida":func(conn net.Conn, dados2 []byte, tk string) {
+			}, "/motorista/tentaCadastrarCorrida": func(conn net.Conn, dados2 []byte, tk string) {
 				//verificar que este puto tem um corrida já cadastrada, caso seja verdade já impede aí
 				//se não tiver corrida cadastrada tem que checar se existe uma possibilidade de criar rota para o local
 				//profano
@@ -657,7 +781,7 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 					Lgcc.GeraRespostaErro(999, conn, "")
 					return
 				}
-							
+
 				motoristasOnlineMu.Lock()
 				idMotorista := motoristasOnline[tk]
 				motoristasOnlineMu.Unlock()
@@ -677,7 +801,6 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 				//Para isso temos que fazer uma identificação de cada servidor e iniciar os dados
 				//de cada respectivo servidor baseado em de id
 
-
 			},
 			"/motorista/cadastrarCorrida": func(conn net.Conn, dados2 []byte, tk string) {
 				fmt.Println("Cheguei no cadastrar corrida")
@@ -692,13 +815,11 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 					fmt.Println("ERRO NO PROCESSAR CADASTRO CORRIDA")
 				}
 
-		
 				listaPairTrechos, err := Model.CriarPairTrechos(trechos, vertices)
-				if err !=nil{
+				if err != nil {
 					fmt.Println("ERRO NÃO TRATAADOOOO")
 				}
 
-				
 				motoristasOnlineMu.Lock()
 				idMotorista := motoristasOnline[tk]
 				motoristasOnlineMu.Unlock()
@@ -709,11 +830,11 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 				motoristas[idMotorista] = motorista
 
 				dados, _ := json.Marshal(motoristas)
-				os.WriteFile("../data/Motoristas.json", dados, 0644)
+				os.WriteFile(getDataPath("Motoristas.json"), dados, 0644)
 				m := motoristas[idMotorista]
 				motoristaMu.Unlock()
 
-				//Temos que separar a lógica de preencher o grafo 
+				//Temos que separar a lógica de preencher o grafo
 				//Da lógica de preencher as arestas
 
 				grafoMu.Lock()
@@ -723,22 +844,21 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 				}
 				//Atualizar arquivo grafo
 				grafito, err := json.Marshal(grafo)
-				if err != nil{
+				if err != nil {
 					fmt.Println("Erro ao converter grafo para json")
 				}
 				//Por algum motivo os Trechos não estão sendo salvos
-				os.WriteFile("../data/grafo.json", grafito, 0644)
+				os.WriteFile(getDataPath("grafo.json"), grafito, 0644)
 				grafoMu.Unlock()
 				fmt.Println("Grafo atualizado com sucesso!")
 
-
 				mutexMapaTrecho.Lock()
-				for i:= range trechos{
+				for i := range trechos {
 					mapaTrechos[trechos[i].Id] = trechos[i]
 				}
-		 
+
 				a, err := json.Marshal(mapaTrechos)
-				os.WriteFile("../data/trechos.json", a, 0644)
+				os.WriteFile(getDataPath("trechos.json"), a, 0644)
 				mutexMapaTrecho.Unlock()
 
 				header := Lgcc.GeraHeaderRespPost("OK", 200, tk)
@@ -808,11 +928,11 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 
 				// Salva trechos.json e Passageiro.json
 				dadosT, _ := json.Marshal(mapaTrechos)
-				os.WriteFile("../data/trechos.json", dadosT, 0644)
+				os.WriteFile(getDataPath("trechos.json"), dadosT, 0644)
 				mutexMapaTrecho.Unlock()
 
 				dadosP, _ := json.Marshal(passageiros)
-				os.WriteFile("../data/Passageiro.json", dadosP, 0644)
+				os.WriteFile(getDataPath("Passageiro.json"), dadosP, 0644)
 				passageiroMu.Unlock()
 
 				// 2. Atualiza o grafo retirando o id motorista associado àquele trecho
@@ -821,21 +941,20 @@ func InicializaMux(tela *map[string]string) map[string]func(net.Conn, []byte, st
 					grafo.RmvIdTrecho(pair.Origem, pair.Destino, idMotorista)
 				}
 				dadosGrafo, _ := json.Marshal(grafo)
-				os.WriteFile("../data/grafo.json", dadosGrafo, 0644)
+				os.WriteFile(getDataPath("grafo.json"), dadosGrafo, 0644)
 				grafoMu.Unlock()
 
 				// 3. Limpa os trechos do motorista e salva em Motoristas.json
 				motorista.Trechos = []Model.PairTrecho{}
 				motoristas[idMotorista] = motorista
 				dadosM, _ := json.Marshal(motoristas)
-				os.WriteFile("../data/Motoristas.json", dadosM, 0644)
+				os.WriteFile(getDataPath("Motoristas.json"), dadosM, 0644)
 				motoristaMu.Unlock()
 
 				fmt.Printf("Corrida do motorista %s cancelada com sucesso! Trechos removidos: %d\n", idMotorista, len(pairTrechos))
 				header := Lgcc.GeraHeaderRespPost("OK", 200, tk)
 				Lgcc.EscritaResp(conn, header, nil)
 			},
-
 		}
 	})
 	return mux
