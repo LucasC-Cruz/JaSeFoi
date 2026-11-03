@@ -179,6 +179,9 @@ switch ($Target.ToLower()) {
     "test-wal4" {
         go run ./test/wal4/main.go
     }
+    "test-ra" {
+        go run ./test/ra/main.go $Restante
+    }
     "test-remoto" {
         go run ./test/remoto/main.go $Restante
     }

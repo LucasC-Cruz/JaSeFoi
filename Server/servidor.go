@@ -395,7 +395,7 @@ func enviarReqRA(targetURL string, reqRA ReqRicartAgrawala) {
 		return
 	}
 	endpoint := strings.TrimRight(targetURL, "/") + "/ra/request"
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := &http.Client{Timeout: 15 * time.Second}
 	httpReq, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(dados))
 	if err != nil {
 		return
@@ -460,7 +460,7 @@ func handleRicartAgrawalaRequest(w http.ResponseWriter, r *http.Request) {
 	if deveAdiar {
 		select {
 		case <-waitCh:
-		case <-time.After(10 * time.Second):
+		case <-time.After(15 * time.Second):
 		}
 	}
 
@@ -1808,6 +1808,69 @@ func iniciarServidorHttp() {
 
 	// Endpoint Ricart-Agrawala para exclusão mútua distribuída
 	mux.HandleFunc("/ra/request", withLamport(handleRicartAgrawalaRequest))
+
+	// Endpoint de Teste/Auditoria do Algoritmo Ricart-Agrawala (Exclusão Mútua Distribuída)
+	mux.HandleFunc("/test/ra/executar", withLamport(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Método não permitido", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			DuracaoMs            int    `json:"duracao_ms"`
+			ArquivoCompartilhado string `json:"arquivo_compartilhado"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.DuracaoMs <= 0 {
+			req.DuracaoMs = 800
+		}
+
+		inicioReq := time.Now()
+		tsInicioReq := getLamport()
+
+		entrarSecaoCriticaRA()
+		inicioSC := time.Now()
+		tsEntradaSC := getLamport()
+
+		// Registra entrada no arquivo compartilhado de auditoria se fornecido
+		if req.ArquivoCompartilhado != "" {
+			f, err := os.OpenFile(req.ArquivoCompartilhado, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
+			if err == nil {
+				fmt.Fprintf(f, "[%s] ENTRADA - Servidor %s (Lamport=%d, UnixMs=%d)\n",
+					time.Now().Format("15:04:05.000"), serverConfig.ID, tsEntradaSC, inicioSC.UnixMilli())
+				f.Close()
+			}
+		}
+
+		// Simula trabalho crítico dentro da Seção Crítica
+		time.Sleep(time.Duration(req.DuracaoMs) * time.Millisecond)
+
+		tsSaidaSC := getLamport()
+		fimSC := time.Now()
+
+		// Registra saída no arquivo compartilhado de auditoria se fornecido
+		if req.ArquivoCompartilhado != "" {
+			f, err := os.OpenFile(req.ArquivoCompartilhado, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
+			if err == nil {
+				fmt.Fprintf(f, "[%s] SAIDA   - Servidor %s (Lamport=%d, UnixMs=%d)\n",
+					time.Now().Format("15:04:05.000"), serverConfig.ID, tsSaidaSC, fimSC.UnixMilli())
+				f.Close()
+			}
+		}
+
+		sairSecaoCriticaRA()
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"server_id":           serverConfig.ID,
+			"ts_inicio_req":       tsInicioReq,
+			"ts_entrada_sc":       tsEntradaSC,
+			"ts_saida_sc":         tsSaidaSC,
+			"hora_inicio_sc_ms":   inicioSC.UnixMilli(),
+			"hora_fim_sc_ms":      fimSC.UnixMilli(),
+			"duracao_espera_ms":   inicioSC.Sub(inicioReq).Milliseconds(),
+			"duracao_execucao_ms": fimSC.Sub(inicioSC).Milliseconds(),
+			"status":              "OK",
+		})
+	}))
 
 	// Endpoint de Busca de Rotas Inter-Servidores (chamado por outros servidores HTTP)
 	mux.HandleFunc("/inter/buscar-rotas", withLamport(func(w http.ResponseWriter, r *http.Request) {

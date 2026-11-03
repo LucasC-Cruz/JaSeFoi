@@ -228,6 +228,10 @@ test-wal4:
 	@echo "==> Executando Teste WAL 4 (Queda S3 durante Commit com recuperação)..."
 	go run ./test/wal4/main.go
 
+test-ra:
+	@echo "==> Executando Teste de Validação de Ricart-Agrawala (Exclusão Mútua Distribuída)..."
+	go run ./test/ra/main.go $(ARGS)
+
 test-remoto:
 	@echo "==> Executando Suíte de Testes Remotos..."
 	go run ./test/remoto/main.go $(ARGS)
