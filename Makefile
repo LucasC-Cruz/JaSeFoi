@@ -13,13 +13,16 @@ PORTA ?= 6741
 PORTA_HTTP ?= 8741
 DATA_DIR ?= ./data
 VIZINHOS ?=
+ADDR ?= localhost:6741
 CIDADES ?=
 CIDADES_INTER ?=
 
 .PHONY: help build run-client run-s1 run-s2 run-s3 run-custom \
         docker-build docker-up docker-down docker-logs docker-run \
         docker-run-s1 docker-run-s2 docker-run-s3 \
-        test-teste1 test-teste2pc test-commit-crash test-wal clean
+        test-teste1 test-teste2pc test-commit-crash test-wal test-lamport \
+        test-2pc1 test-2pc2 test-2pc3 test-wal1 test-wal2 test-wal3 test-wal4 \
+        test-remoto clean
 
 # ------------------------------------------------------------------------------
 # Ajuda / Menu de Comandos
@@ -62,6 +65,15 @@ help:
 	@echo "   make test-teste2pc      - Teste 2PC: Queda do Servidor 3 na 1ª fase (Prepare)"
 	@echo "   make test-commit-crash  - Teste 2PC: Queda do Servidor 3 após commit no S1"
 	@echo "   make test-wal           - Teste WAL: Servidor 3 cai no commit e recupera via Heartbeat"
+	@echo "   make test-lamport       - Teste Concorrência: 2 passageiros disputam vagas com Lamport"
+	@echo "   make test-2pc1          - Teste 2PC 1: Reserva e confirmação (commit) em 3 servidores"
+	@echo "   make test-2pc2          - Teste 2PC 2: Reserva e cancelamento (abort) em 3 servidores"
+	@echo "   make test-2pc3          - Teste 2PC 3: 10 passageiros disputam 5 vagas em 3 servidores"
+	@echo "   make test-wal1          - Teste WAL 1: Queda de S3 no Prepare (sem voltar)"
+	@echo "   make test-wal2          - Teste WAL 2: Queda de S3 no Prepare (com volta)"
+	@echo "   make test-wal3          - Teste WAL 3: Queda de S3 durante Commit (sem voltar)"
+	@echo "   make test-wal4          - Teste WAL 4: Queda de S3 durante Commit (com volta)"
+	@echo "   make test-remoto [ARGS=\"...\"] - Suíte de testes remotos apontando para IPs externos"
 	@echo "   make test-all           - Executa todos os testes automatizados em sequência"
 	@echo "======================================================================"
 
@@ -91,8 +103,8 @@ run-custom:
 	SERVER_ID=$(SERVER_ID) PORTA=$(PORTA) PORTA_HTTP=$(PORTA_HTTP) VIZINHOS_HTTP="$(VIZINHOS)" CIDADES="$(CIDADES)" CIDADES_INTER="$(CIDADES_INTER)" go run Server/servidor.go
 
 run-client:
-	@echo "==> Iniciando Cliente..."
-	go run Client/main.go
+	@echo "==> Iniciando Cliente em $(ADDR)..."
+	go run Client/main.go -addr $(ADDR)
 
 # ------------------------------------------------------------------------------
 # Comandos Docker
@@ -184,7 +196,43 @@ test-wal:
 	@echo "==> Executando Teste WAL (Queda pós-Commit com Recuperação)..."
 	go run ./test/teste_wal/main.go
 
-test-all: test-teste1 test-teste2pc test-commit-crash test-wal
+test-lamport:
+	@echo "==> Executando Teste de Concorrência e Lamport..."
+	go run ./test/teste_concorrencia_lamport/main.go
+
+test-2pc1:
+	@echo "==> Executando Teste 2PC 1 (Reserva e Commit em 3 Servidores)..."
+	go run ./test/2pc1/main.go
+
+test-2pc2:
+	@echo "==> Executando Teste 2PC 2 (Reserva e Abort em 3 Servidores)..."
+	go run ./test/2pc2/main.go
+
+test-2pc3:
+	@echo "==> Executando Teste 2PC 3 (10 Passageiros disputam 5 Vagas em 3 Servidores)..."
+	go run ./test/2pc3/main.go
+
+test-wal1:
+	@echo "==> Executando Teste WAL 1 (Queda S3 no Prepare sem voltar)..."
+	go run ./test/wal1/main.go
+
+test-wal2:
+	@echo "==> Executando Teste WAL 2 (Queda S3 no Prepare com recuperação)..."
+	go run ./test/wal2/main.go
+
+test-wal3:
+	@echo "==> Executando Teste WAL 3 (Queda S3 durante Commit com Rollback)..."
+	go run ./test/wal3/main.go
+
+test-wal4:
+	@echo "==> Executando Teste WAL 4 (Queda S3 durante Commit com recuperação)..."
+	go run ./test/wal4/main.go
+
+test-remoto:
+	@echo "==> Executando Suíte de Testes Remotos..."
+	go run ./test/remoto/main.go $(ARGS)
+
+test-all: test-teste1 test-teste2pc test-commit-crash test-wal test-lamport test-2pc1 test-2pc2 test-2pc3 test-wal1 test-wal2 test-wal3 test-wal4
 	@echo "==> Todos os testes foram executados com sucesso!"
 
 # ------------------------------------------------------------------------------

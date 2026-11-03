@@ -44,7 +44,7 @@ Compila o servidor e o cliente gerando os binários na pasta `bin/`:
 make build
 ```
 
-### 1.2. Execução Local dos Servidores
+### 1.2. Execução Local dos Servidores e Cliente
 Para rodar os 3 servidores na mesma máquina em abas separadas do terminal:
 ```bash
 # Terminal 1:
@@ -57,9 +57,13 @@ make run-s2
 make run-s3
 ```
 
-Para abrir o cliente interativo:
+Para abrir o cliente interativo conectado em um servidor local ou remoto:
 ```bash
+# Conectar no localhost padrão (porta 6741):
 make run-client
+
+# Conectar em outro computador pelo IP e Porta TCP:
+make run-client ADDR="192.168.1.102:6742"
 ```
 
 ---
@@ -122,7 +126,13 @@ Abra três janelas do PowerShell:
 
 Para abrir o cliente:
 ```powershell
+# Conectar no localhost padrão (porta 6741):
 .\make.ps1 run-client
+
+# Conectar em outro computador pelo IP e Porta TCP:
+.\make.ps1 run-client -Vizinhos "192.168.1.102:6742"
+# ou direto com Go:
+go run Client/main.go -addr 192.168.1.102:6742
 ```
 
 ---

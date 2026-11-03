@@ -1782,13 +1782,26 @@ func iniciarServidorHttp() {
 	mux.HandleFunc("/status", withLamport(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		vizinhosHttpMu.RLock()
-		defer vizinhosHttpMu.RUnlock()
+		vizinhosCopia := make(map[string]*VizinhoHttpClient, len(vizinhosHttpMap))
+		for k, v := range vizinhosHttpMap {
+			vizinhosCopia[k] = v
+		}
+		vizinhosHttpMu.RUnlock()
+
+		mutexMapaTrecho.Lock()
+		trechosCopia := make(map[string]Model.Trecho, len(mapaTrechos))
+		for k, v := range mapaTrechos {
+			trechosCopia[k] = v
+		}
+		mutexMapaTrecho.Unlock()
+
 		resp := map[string]interface{}{
 			"id":       serverConfig.ID,
 			"status":   "UP",
 			"cidades":  serverConfig.Cidades,
-			"vizinhos": vizinhosHttpMap,
+			"vizinhos": vizinhosCopia,
 			"lamport":  getLamport(),
+			"trechos":  trechosCopia,
 		}
 		json.NewEncoder(w).Encode(resp)
 	}))

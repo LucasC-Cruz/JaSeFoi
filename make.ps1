@@ -52,6 +52,16 @@ function Show-Help {
     Write-Host "   .\make.ps1 docker-logs       - Acompanha logs dos containers"
     Write-Host ""
     Write-Host " Testes Automatizados:"
+    Write-Host "   .\make.ps1 test-wal          - Teste WAL com recuperação via Heartbeat"
+    Write-Host "   .\make.ps1 test-lamport      - Teste de concorrência simultânea e relógio Lamport"
+    Write-Host "   .\make.ps1 test-2pc1         - Teste 2PC 1: Reserva e confirmação em 3 servidores"
+    Write-Host "   .\make.ps1 test-2pc2         - Teste 2PC 2: Reserva e cancelamento em 3 servidores"
+    Write-Host "   .\make.ps1 test-2pc3         - Teste 2PC 3: 10 passageiros disputam 5 vagas em 3 servidores"
+    Write-Host "   .\make.ps1 test-wal1         - Teste WAL 1: Queda de S3 no Prepare (sem voltar)"
+    Write-Host "   .\make.ps1 test-wal2         - Teste WAL 2: Queda de S3 no Prepare (com volta)"
+    Write-Host "   .\make.ps1 test-wal3         - Teste WAL 3: Queda de S3 durante Commit (sem voltar)"
+    Write-Host "   .\make.ps1 test-wal4         - Teste WAL 4: Queda de S3 durante Commit (com volta)"
+    Write-Host "   .\make.ps1 test-remoto       - Suíte de testes remotos (com flags -s1, -s2, -s3, -modo)"
     Write-Host "   .\make.ps1 test-all          - Executa todos os testes em sequência"
     Write-Host "======================================================================" -ForegroundColor Cyan
 }
@@ -74,7 +84,13 @@ switch ($Target.ToLower()) {
         go run Server/servidor.go configs/server3.json
     }
     "run-client" {
-        go run Client/main.go
+        $addr = "localhost:6741"
+        if ($Vizinhos) {
+            $addr = $Vizinhos
+        }
+        # Se na máquina local está rodando o server-2 ou server-3, ajusta a porta padrão se não especificada
+        Write-Host "==> Conectando cliente em: $addr" -ForegroundColor Green
+        go run Client/main.go -addr $addr
     }
     "docker-build" {
         docker build -t jasefoi-server .
@@ -139,6 +155,36 @@ switch ($Target.ToLower()) {
     "test-wal" {
         go run ./test/teste_wal/main.go
     }
+    "test-lamport" {
+        go run ./test/teste_concorrencia_lamport/main.go
+    }
+    "test-2pc1" {
+        go run ./test/2pc1/main.go
+    }
+    "test-2pc2" {
+        go run ./test/2pc2/main.go
+    }
+    "test-2pc3" {
+        go run ./test/2pc3/main.go
+    }
+    "test-wal1" {
+        go run ./test/wal1/main.go
+    }
+    "test-wal2" {
+        go run ./test/wal2/main.go
+    }
+    "test-wal3" {
+        go run ./test/wal3/main.go
+    }
+    "test-wal4" {
+        go run ./test/wal4/main.go
+    }
+    "test-remoto" {
+        go run ./test/remoto/main.go $Restante
+    }
+    "test-remote" {
+        go run ./test/remoto/main.go $Restante
+    }
     "test-all" {
         Write-Host "==> Executando Teste 1..." -ForegroundColor Yellow
         go run ./test/teste1/main.go
@@ -148,6 +194,8 @@ switch ($Target.ToLower()) {
         go run ./test/teste2pc_commit_crash/main.go
         Write-Host "==> Executando Teste WAL (Commit Crash / Recovery)..." -ForegroundColor Yellow
         go run ./test/teste_wal/main.go
+        Write-Host "==> Executando Teste Concorrência e Lamport..." -ForegroundColor Yellow
+        go run ./test/teste_concorrencia_lamport/main.go
         Write-Host "==> Todos os testes concluídos!" -ForegroundColor Green
     }
     default {
