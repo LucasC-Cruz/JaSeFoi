@@ -7,17 +7,27 @@
     .\make.ps1 test-all
 #>
 
+[CmdletBinding()]
 param(
     [Parameter(Position=0)]
     [string]$Target = "help",
 
     [Parameter(Position=1)]
+    [Alias("Vizinho")]
     [string]$Vizinhos = "",
 
     [string]$ServerId = "server-1",
     [string]$Porta = "6741",
-    [string]$PortaHttp = "8741"
+    [string]$PortaHttp = "8741",
+
+    [Parameter(ValueFromRemainingArguments=$true)]
+    [string[]]$Restante
 )
+
+# Se o usuário passou argumentos adicionais posicionais (ex: .\make.ps1 docker-run-s1 http://IP:PORTA)
+if (-not $Vizinhos -and $Restante -and $Restante.Count -gt 0) {
+    $Vizinhos = $Restante[0]
+}
 
 function Show-Help {
     Write-Host "======================================================================" -ForegroundColor Cyan
