@@ -1,4 +1,4 @@
-﻿package Model
+package Model
 
 import (
 	"crypto/rand"
@@ -73,8 +73,10 @@ type InfoPassagem struct {
 }
 
 type InfoConfirmarReserva struct {
-	Data string   `json:"data"`
-	Rota []Aresta `json:"rota"`
+	Rota         []Aresta `json:"rota"`
+	Confirma     bool     `json:"confirma"`
+	Cancelar     bool     `json:"cancelar,omitempty"`
+	TkAssociado  string   `json:"token"`
 }
 
 
@@ -163,7 +165,8 @@ func ProcessarLista(entrada string) ([]string, error) {
 
 	// 5. Percorre os itens para limpar espaços vazios e converter para Upper Case
 	for _, item := range itens {
-		itemLimpo := strings.TrimSpace(item)
+		itemSemUnderline := strings.ReplaceAll(item, "_", " ")
+		itemLimpo := strings.Join(strings.Fields(itemSemUnderline), " ")
 		
 		// Ignora pedaços vazios caso a string venha com vírgulas duplas (ex: "A,,B")
 		if itemLimpo != "" {

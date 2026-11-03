@@ -1,11 +1,36 @@
-﻿package main
+package main
 
 import (
 	"Golang/Apiclient"
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 )
+
+func lerLinha() string {
+	var b []byte
+	buf := make([]byte, 1)
+	for {
+		n, err := os.Stdin.Read(buf)
+		if n > 0 {
+			ch := buf[0]
+			if len(b) == 0 && (ch == '\r' || ch == '\n' || ch == ' ' || ch == '\t') {
+				continue
+			}
+			if ch == '\n' {
+				break
+			}
+			if ch != '\r' {
+				b = append(b, ch)
+			}
+		}
+		if err != nil {
+			break
+		}
+	}
+	return strings.TrimSpace(string(b))
+}
 
 const (
 	HOST = "localhost"
@@ -91,10 +116,10 @@ MenuPrincipal:
 					var escolha int
 
 					fmt.Println("Digite a Origem:")
-					fmt.Scan(&origem)
+					origem = lerLinha()
 
 					fmt.Println("Digite o Destino:")
-					fmt.Scan(&destino)
+					destino = lerLinha()
 
 					fmt.Println("Digite a Data (ex: 20/10):")
 					fmt.Scan(&data)
@@ -117,7 +142,28 @@ MenuPrincipal:
 					}
 
 					rotaEscolhida := rotas[escolha-1]
-					msg, err := c.ConfirmarReserva(rotaEscolhida, data, tk)
+					msg, err := c.TentaReserva(rotaEscolhida, false, tk)
+					if err != nil {
+						fmt.Println(msg)
+						fmt.Println("Erro:", err)
+						continue MenuPassageiro
+					}
+					fmt.Println(msg)
+					fmt.Println("Deseja realmente reservar esta rota? (Responda em até 10 segundos)")
+					fmt.Println("[1] Sim, confirmar reserva")
+					fmt.Println("[0] Não, cancelar e liberar rota")
+					fmt.Print(">> ")
+					var confirmacaoReserva string
+					fmt.Scan(&confirmacaoReserva)
+
+					if confirmacaoReserva == "1" {
+						msg, err = c.TentaReserva(rotaEscolhida, true, tk)
+					} else {
+						msg, err = c.CancelarReservaPendente(rotaEscolhida, tk)
+					}
+					if msg != "" {
+						fmt.Println(msg)
+					}
 					if err != nil {
 						fmt.Println("Erro:", err)
 					} else {
@@ -195,7 +241,7 @@ MenuPrincipal:
 					fmt.Print(front)
 
 					fmt.Print("\nRota: >> ")
-					fmt.Scan(&rota)
+					rota = lerLinha()
 					fmt.Print("Data: >> ")
 					fmt.Scan(&data)
 					fmt.Print("Número de assentos: >> ")

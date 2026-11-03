@@ -1,4 +1,4 @@
-﻿package Lgcc
+package Lgcc
 
 import (
 	"bufio"
@@ -221,8 +221,11 @@ func EscritaResp(conn net.Conn, header, body []byte) error {
 
 // REFACTOR
 func GeraRespostaErro(codigoErro int, conn net.Conn, token string) {
-
-	body, tamanho, tipo, err := GeraBody("erro")
+	msgErro := "erro"
+	if token != "" {
+		msgErro = token
+	}
+	body, tamanho, tipo, err := GeraBody(msgErro)
 	if err != nil {
 		fmt.Println(err)
 	}

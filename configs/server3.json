@@ -1,9 +1,9 @@
 {
   "id": "server-3",
   "porta": "6743",
+  "portaHttp": "8743",
   "dataDir": "../data/server3",
-  "vizinhos": ["127.0.0.1:6741", "127.0.0.1:6742"],
-  "cidades": ["SERRINHA", "VALENCA"],
-  "cidadesInter": []
+  "vizinhosHttp": ["http://127.0.0.1:8742"],
+  "cidades": ["SERRINHA", "VALENCA", "XIQUE XIQUE"],
+  "cidadesInter": ["SERRINHA"]
 }
-

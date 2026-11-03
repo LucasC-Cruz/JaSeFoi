@@ -1,9 +1,10 @@
 {
   "id": "server-1",
   "porta": "6741",
+  "portaHttp": "8741",
   "dataDir": "../data/server1",
-  "vizinhos": ["127.0.0.1:6742", "127.0.0.1:6743"],
-  "cidades": ["SALVADOR", "FEIRA DE SANTANA"],
+  "vizinhos": ["127.0.0.1:6742"],
+  "vizinhosHttp": ["http://127.0.0.1:8742"],
+  "cidades": ["SALVADOR", "FEIRA DE SANTANA", "SIMOES FILHO", "AMELIA RODRIGUES"],
   "cidadesInter": ["FEIRA DE SANTANA"]
 }
-

@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  server-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jasefoi-server-1
+    environment:
+      - SERVER_ID=server-1
+      - PORTA=6741
+      - PORTA_HTTP=8741
+      - DATA_DIR=/app/data
+      - CIDADES=SALVADOR,FEIRA DE SANTANA,SIMOES FILHO,AMELIA RODRIGUES
+      - CIDADES_INTER=FEIRA DE SANTANA
+      # Se estiver em máquinas separadas, substitua 'server-2' pelo IP real da outra máquina (ex: http://192.168.1.102:8742)
+      - VIZINHOS_HTTP=http://server-2:8742
+    ports:
+      - "6741:6741"
+      - "8741:8741"
+    volumes:
+      - ./data/server1:/app/data
+
+  server-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jasefoi-server-2
+    environment:
+      - SERVER_ID=server-2
+      - PORTA=6742
+      - PORTA_HTTP=8742
+      - DATA_DIR=/app/data
+      - CIDADES=FEIRA DE SANTANA,SERRINHA,IRECE,DOMINGUINHOS
+      - CIDADES_INTER=FEIRA DE SANTANA,SERRINHA
+      # Se estiver em máquinas separadas, aponte para os IPs das máquinas 1 e 3
+      - VIZINHOS_HTTP=http://server-1:8741,http://server-3:8743
+    ports:
+      - "6742:6742"
+      - "8742:8742"
+    volumes:
+      - ./data/server2:/app/data
+
+  server-3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jasefoi-server-3
+    environment:
+      - SERVER_ID=server-3
+      - PORTA=6743
+      - PORTA_HTTP=8743
+      - DATA_DIR=/app/data
+      - CIDADES=SERRINHA,VALENCA,XIQUE XIQUE
+      - CIDADES_INTER=SERRINHA
+      # Se estiver em máquinas separadas, aponte para o IP da máquina 2
+      - VIZINHOS_HTTP=http://server-2:8742
+    ports:
+      - "6743:6743"
+      - "8743:8743"
+    volumes:
+      - ./data/server3:/app/data
+

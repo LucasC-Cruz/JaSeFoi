@@ -157,7 +157,7 @@ func main() {
 			defer wgCorrida.Done()
 			<-startBarrier // Aguarda o tiro de largada
 
-			_, err := s.client.ConfirmarReserva(rotaAlvo, dataViagem, s.tk)
+			_, err := s.client.TentaReserva(rotaAlvo, true, s.tk)
 			if err == nil {
 				atomic.AddInt64(&sucessos, 1)
 			} else {

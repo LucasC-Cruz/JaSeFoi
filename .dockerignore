@@ -1,0 +1,6 @@
+.git
+.vscode
+*.exe
+*.log
+tmp/
+
